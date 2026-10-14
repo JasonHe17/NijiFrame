@@ -1,0 +1,46 @@
+// SPDX-License-Identifier: GPL-3.0-only
+plugins {
+    alias(libs.plugins.android.application)
+    alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.kotlin.compose)
+}
+android {
+    namespace 'dev.nijiframe.app'
+    compileSdk 36
+    buildToolsVersion '36.0.0'
+    defaultConfig {
+        applicationId 'dev.nijiframe.app'
+        minSdk 26
+        targetSdk 36
+        versionCode 1
+        versionName '0.1.0-dev'
+        testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
+        ndk { abiFilters 'arm64-v8a', 'x86_64' }
+    }
+    buildFeatures { compose true }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+    kotlinOptions { jvmTarget = '17' }
+}
+dependencies {
+    implementation project(':editor-core')
+    implementation project(':image-core')
+    implementation platform(libs.compose.bom)
+    implementation libs.compose.material3
+    implementation libs.activity.compose
+    implementation libs.lifecycle.viewmodel
+    implementation libs.lifecycle.compose
+    implementation libs.coroutines.android
+    implementation libs.exif
+    androidTestImplementation libs.test.runner
+    androidTestImplementation libs.junit
+}
+
+// Include licenses alongside existing notices carried by runtime dependencies.
+def licenseAssets = tasks.register('prepareLicenseAssets', Sync) {
+    into layout.buildDirectory.dir('generated/licenseAssets/open-source')
+    from rootProject.file('licenses')
+    from rootProject.file('LICENSE')
+    from rootProject.file('THIRD_PARTY_NOTICES.md')
+}
+android.sourceSets.main.assets.srcDir(layout.buildDirectory.dir('generated/licenseAssets'))
+tasks.named('preBuild').configure { dependsOn licenseAssets }

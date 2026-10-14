@@ -1,0 +1,23 @@
+# Local Android configuration and build output
+.gradle/
+.kotlin/
+.cxx/
+**/build/
+local.properties
+.idea/
+*.iml
+
+# Local experiments, credentials, and signing material
+.local/
+artifacts/
+.env
+.env.*
+*.jks
+*.keystore
+keystore.properties
+
+# Native/Python intermediate output
+__pycache__/
+*.pyc
+CMakeUserPresets.json
+.DS_Store
