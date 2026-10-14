@@ -77,3 +77,33 @@ enum class Look(val label: String) {
         }
     }
 }
+
+
+enum class CropHandle { MOVE, TOP_LEFT, TOP_RIGHT, BOTTOM_LEFT, BOTTOM_RIGHT }
+
+object CropGesture {
+    fun drag(start: Crop, dx: Float, dy: Float, width: Int, height: Int, handle: CropHandle, aspect: Float?): Crop {
+        require(dx.isFinite() && dy.isFinite() && width>0 && height>0)
+        if (handle==CropHandle.MOVE) return start.copy(
+            x=(start.x+dx).roundToInt().coerceIn(0,width-start.width),
+            y=(start.y+dy).roundToInt().coerceIn(0,height-start.height))
+        val right=handle==CropHandle.TOP_RIGHT || handle==CropHandle.BOTTOM_RIGHT
+        val bottom=handle==CropHandle.BOTTOM_LEFT || handle==CropHandle.BOTTOM_RIGHT
+        val ax=if(right) start.x else start.x+start.width
+        val ay=if(bottom) start.y else start.y+start.height
+        val maxW=if(right) width-ax else ax
+        val maxH=if(bottom) height-ay else ay
+        val deltaW=dx*(if(right) 1 else -1)
+        val deltaH=dy*(if(bottom) 1 else -1)
+        var w=(start.width+deltaW).coerceIn(1f,maxW.toFloat())
+        var h=(start.height+deltaH).coerceIn(1f,maxH.toFloat())
+        if(aspect!=null) {
+            require(aspect.isFinite() && aspect>0)
+            val desired=if(abs(deltaW)>=abs(deltaH)*aspect) start.width+deltaW else (start.height+deltaH)*aspect
+            val maximum=min(maxW.toFloat(),maxH*aspect)
+            w=desired.coerceIn(min(1f,maximum),maximum);h=w/aspect
+        }
+        val iw=w.roundToInt().coerceIn(1,maxW);val ih=h.roundToInt().coerceIn(1,maxH)
+        return Crop(if(right) ax else ax-iw,if(bottom) ay else ay-ih,iw,ih)
+    }
+}

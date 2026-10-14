@@ -24,6 +24,16 @@ class BasicEditTest {
         assertEquals(Edit(1f,0.5f,1), result.manifest.edit)
         assertArrayEquals(source, result.original)
     }
+    @Test fun legacyNonSquareCropMovesIntoRotatedCoordinates() {
+        val original=ProjectIO.create(byteArrayOf(1),40,20)
+        val legacy=original.copy(manifest=original.manifest.copy(version=1,pipeline="srgb-tone-crop-turn-v1",
+            edit=Edit(turns=1,crop=Crop(10,0,30,20))))
+        val bytes=ByteArrayOutputStream().also {ProjectIO.write(legacy,it)}.toByteArray()
+        val current=ProjectIO.read(bytes.inputStream())
+        assertEquals(Crop(0,10,20,30),current.manifest.edit.crop)
+        assertEquals(20 to 30,Geometry.outputSize(40,20,current.manifest.edit))
+    }
+
     @Test fun newAdjustmentsRoundTripAndRejectOldVersion() {
         val edit = Edit(0.5f, 1.2f, 3, Crop(1,1,5,7), contrast=.2f, highlights=-.3f, shadows=.2f,
             whites=.1f, blacks=-.1f, warmth=.4f, tint=-.2f, vibrance=.5f, sharpen=.8f, vignette=.3f,
@@ -49,6 +59,25 @@ class BasicEditTest {
             }
         }
     }
+    @Test fun cropHandlesClampAndPreserveAspectAndSelectedContent() {
+        val crop=Crop(20,30,200,100)
+        assertEquals(Crop(0,0,200,100),CropGesture.drag(crop,-1000f,-1000f,400,300,CropHandle.MOVE,null))
+        assertEquals(Crop(200,200,200,100),CropGesture.drag(crop,1000f,1000f,400,300,CropHandle.MOVE,null))
+        val resized=CropGesture.drag(crop,80f,40f,400,300,CropHandle.BOTTOM_RIGHT,2f)
+        assertEquals(Crop(20,30,280,140),resized)
+        for(handle in CropHandle.entries) for(delta in listOf(-1000f,0f,1000f)) {
+            val result=CropGesture.drag(crop,delta,-delta,400,300,handle,2f)
+            Edit(crop=result).validate(400,300)
+        }
+        val original=Edit(crop=crop)
+        val rotated=Geometry.rotate(original,400,300)
+        assertEquals(Crop(170,20,100,200),rotated.crop)
+        var roundTrip=rotated
+        repeat(3) {roundTrip=Geometry.rotate(roundTrip,400,300)}
+        assertEquals(original,roundTrip)
+        assertEquals(original,Geometry.flip(Geometry.flip(original,400,300,true),400,300,true))
+    }
+
     @Test fun presetsPreserveGeometryAndExportsNeverUpscale() {
         val geometry = Edit(turns=1,crop=Crop(2,3,100,200),straighten=8f,flipHorizontal=true)
         for (look in Look.entries) {

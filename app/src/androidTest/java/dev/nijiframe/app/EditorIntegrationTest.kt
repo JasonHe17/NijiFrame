@@ -33,17 +33,16 @@ class EditorIntegrationTest {
         val sourceUri = document("fixture.png", "image/png")
         val projectUri = document("edited.nijiproj", "application/zip")
         val jpegUri = document("export.jpg", "image/jpeg")
-        val repository = ProjectRepository(context)
-        // Never overwrite a user's saved project when running connected checks.
-        val previous = repository.savedFile.takeIf { it.exists() }?.readBytes()
+        val directory = File(context.cacheDir,"test-library-${java.util.UUID.randomUUID()}")
+        val repository = ProjectRepository(context,directory)
         try {
             resolver.openOutputStream(sourceUri)!!.use { fixture().compress(Bitmap.CompressFormat.PNG, 100, it) }
             val (project, source) = repository.importPhoto(sourceUri)
             val edited = project.copy(manifest = project.manifest.copy(edit = Edit(1f, 0f, 1, Crop(0, 10, 20, 30))))
-            repository.save(edited)
+            repository.library.create(edited)
             repository.exportProject(edited, projectUri)
             resolver.delete(sourceUri, null, null)
-            val reopened = ProjectRepository(context).restore()
+            val reopened = ProjectRepository(context,directory).restore()
             assertArrayEquals(project.original, reopened.first.original)
             assertEquals(edited.manifest, reopened.first.manifest)
             val portable = repository.open(projectUri)
@@ -64,23 +63,23 @@ class EditorIntegrationTest {
             source.recycle(); reopened.second.recycle(); portable.second.recycle(); neutral.recycle(); output.recycle()
         } finally {
             listOf(sourceUri, projectUri, jpegUri).forEach { resolver.delete(it, null, null) }
-            if (previous == null) repository.savedFile.delete() else repository.savedFile.writeBytes(previous)
+            directory.deleteRecursively()
         }
     }
     @Test fun latestEditWinsAndFailedProviderExportKeepsRecoveryCopy() = runBlocking {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val uri = document("latest.png", "image/png")
-        val repository = ProjectRepository(context)
-        val previous = repository.savedFile.takeIf { it.exists() }?.readBytes()
+        val directory = File(context.cacheDir,"test-library-${java.util.UUID.randomUUID()}")
+        val repository = ProjectRepository(context,directory)
         val store = androidx.lifecycle.ViewModelStore()
         lateinit var model: EditorViewModel
         fun onMain(block: () -> Unit) = instrumentation.runOnMainSync(block)
-        suspend fun idle() { withTimeout(15_000) { while (model.ui.value.busy || model.ui.value.rendering) delay(20) } }
+        suspend fun idle() { withTimeout(15_000) { while (model.ui.value.busy || model.ui.value.rendering || model.ui.value.saving) delay(20) } }
         try {
             val bitmap = Bitmap.createBitmap(800, 600, Bitmap.Config.ARGB_8888).apply { eraseColor(Color.rgb(128, 128, 128)) }
             resolver.openOutputStream(uri)!!.use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
             bitmap.recycle()
-            onMain { model = EditorViewModel(context.applicationContext as android.app.Application); store.put("editor", model) }
+            onMain { model = EditorViewModel(context.applicationContext as android.app.Application,repository); store.put("editor", model) }
             idle()
             onMain { model.importPhoto(uri) }; idle()
             onMain {
@@ -101,7 +100,46 @@ class EditorIntegrationTest {
         } finally {
             onMain { store.clear() }
             resolver.delete(uri, null, null)
-            if (previous == null) repository.savedFile.delete() else repository.savedFile.writeBytes(previous)
+            directory.deleteRecursively()
+        }
+    }
+
+    @Test fun toolDraftCancellationAndAutomaticSaveSurviveANewViewModel() = runBlocking {
+        val instrumentation=InstrumentationRegistry.getInstrumentation()
+        val directory=File(context.cacheDir,"test-library-${java.util.UUID.randomUUID()}")
+        val repo=ProjectRepository(context,directory)
+        val uri=document("autosave.png","image/png")
+        resolver.openOutputStream(uri)!!.use { fixture().compress(Bitmap.CompressFormat.PNG,100,it) }
+        val firstStore=androidx.lifecycle.ViewModelStore()
+        val secondStore=androidx.lifecycle.ViewModelStore()
+        lateinit var first: EditorViewModel
+        lateinit var second: EditorViewModel
+        fun main(block: ()->Unit)=instrumentation.runOnMainSync(block)
+        suspend fun idle(model: EditorViewModel) { withTimeout(15_000) {
+            while(model.ui.value.busy || model.ui.value.rendering || model.ui.value.saving) delay(20)
+        }}
+        try {
+            main {first=EditorViewModel(context.applicationContext as android.app.Application,repo);firstStore.put("editor",first)}
+            idle(first);main {first.importPhoto(uri)};idle(first)
+            val id=first.ui.value.projectId!!
+            main {first.beginTool(EditorTool.COLOR);first.updateDraft(Edit(warmth=.5f));first.cancelTool()}
+            idle(first)
+            assertEquals(0f,repo.library.read(id).manifest.edit.warmth)
+            main {first.beginTool(EditorTool.COLOR);first.updateDraft(Edit(warmth=.5f,tint=-.2f));first.applyTool()}
+            idle(first)
+            assertFalse(first.ui.value.dirty)
+            assertEquals(.5f,repo.library.read(id).manifest.edit.warmth)
+            main {firstStore.clear();second=EditorViewModel(context.applicationContext as android.app.Application,repo);secondStore.put("editor",second)}
+            idle(second)
+            assertEquals(id,second.ui.value.projectId)
+            assertEquals(-.2f,second.ui.value.project!!.manifest.edit.tint)
+            assertNull(second.ui.value.draft)
+            main {second.home()};idle(second)
+            assertTrue(second.ui.value.home)
+            assertEquals(1,second.ui.value.projects.size)
+        } finally {
+            main {firstStore.clear();secondStore.clear()}
+            resolver.delete(uri,null,null);directory.deleteRecursively()
         }
     }
 

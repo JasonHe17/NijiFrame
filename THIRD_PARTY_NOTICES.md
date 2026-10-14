@@ -14,7 +14,7 @@ No portrait models, reference-app source, external photographs or research sampl
 | JSpecify annotations | 1.0.0 | Apache-2.0; [source license](https://github.com/jspecify/jspecify/blob/v1.0.0/LICENSE) |
 | Gradle wrapper | 8.13 | Apache-2.0; [source license](https://github.com/gradle/gradle/blob/v8.13.0/LICENSE); generated scripts retain upstream headers |
 | NDK C++ runtime support | NDK 28.2.13676358 | Apache-2.0 WITH LLVM-exception; license excerpt retained from the selected NDK's `NOTICE.toolchain` |
-| JUnit and AndroidX test runner (test APK only) | 4.13.2 / 1.6.2 | EPL-1.0 / Apache-2.0; [JUnit license](https://github.com/junit-team/junit4/blob/r4.13.2/LICENSE-junit.txt), [AndroidX Test](https://github.com/android/android-test) |
+| JUnit, AndroidX Test core/runner and UIAutomator (test APK only) | 4.13.2 / 1.6.1 / 1.6.2 / 2.4.0 | EPL-1.0 / Apache-2.0; [JUnit license](https://github.com/junit-team/junit4/blob/r4.13.2/LICENSE-junit.txt), [AndroidX Test](https://github.com/android/android-test) |
 
 Apache and LLVM license texts are in `licenses/`. The upstream Gradle distribution license is retained separately as `Gradle-LICENSE.txt`; its broader inventory does not describe the app runtime. The complete selected NDK toolchain notice is also retained there as a superset: it includes build tools and is not a claim that every listed component is linked into the app. Existing dependency notices inside AARs/JARs remain packaged. The app also packages the project license, this inventory and these license texts under `assets/open-source/`.
 

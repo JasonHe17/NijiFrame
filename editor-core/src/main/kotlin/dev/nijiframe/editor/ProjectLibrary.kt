@@ -17,6 +17,10 @@ class ProjectLibrary(private val directory: File) {
         ProjectIO.saveAtomic(project, file(id))
         ProjectIO.replaceAtomic(lastFile) { it.write(id.encodeToByteArray()) }
     }
+    fun markOpened(id: String) {
+        require(file(id).isFile) { "工程不存在" }
+        ProjectIO.replaceAtomic(lastFile) { it.write(id.encodeToByteArray()) }
+    }
     fun read(id: String): Project = file(id).inputStream().use(ProjectIO::read)
     fun entries(): List<Entry> = directory.listFiles().orEmpty()
         .filter { it.extension == "nijiproj" && it.nameWithoutExtension.matches(Regex("[0-9a-f-]{36}")) }
