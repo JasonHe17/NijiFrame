@@ -83,7 +83,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     fun redo() { if (!mutable.value.busy) publishEdit(history.redo()) }
     private fun publishEdit(edit: Edit) {
         val project = mutable.value.project ?: return
-        val updated = project.copy(manifest = project.manifest.copy(edit = edit))
+        val updated = project.withEdit(edit)
         val dirty = saved?.manifest != updated.manifest
         mutable.value = mutable.value.copy(project = updated, dirty = dirty, comparing = false,
             canUndo = history.canUndo, canRedo = history.canRedo,

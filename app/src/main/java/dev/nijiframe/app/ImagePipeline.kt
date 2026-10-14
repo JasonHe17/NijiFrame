@@ -5,6 +5,9 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.ColorSpace
 import android.graphics.Matrix
+import android.graphics.Canvas
+import android.graphics.Paint
+import dev.nijiframe.editor.Geometry
 import android.os.Build
 import androidx.exifinterface.media.ExifInterface
 import dev.nijiframe.editor.Edit
@@ -59,26 +62,76 @@ object ImagePipeline {
 
     suspend fun render(source: Bitmap, edit: Edit): Bitmap {
         edit.validate(source.width, source.height)
-        val crop = edit.crop
-        val width = crop?.width ?: source.width
-        val height = crop?.height ?: source.height
-        val output = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val width = source.width
+        val height = source.height
+        var output = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         try {
-            // Pointwise tone commutes with crop. Bounded strips make cancellation cooperative.
+            // Bounded strips keep global tone processing cancellable without a full pixel-array copy.
+            val parameters = floatArrayOf(edit.exposureEv, edit.saturation, edit.contrast, edit.highlights,
+                edit.shadows, edit.whites, edit.blacks, edit.warmth, edit.tint, edit.vibrance)
             val buffer = IntArray(width * minOf(32, height))
             for (y in 0 until height step 32) {
                 currentCoroutineContext().ensureActive()
                 val rows = minOf(32, height - y)
-                source.getPixels(buffer, 0, width, crop?.x ?: 0, (crop?.y ?: 0) + y, width, rows)
-                NativeTone.apply(buffer, width * rows, edit.exposureEv, edit.saturation)
+                source.getPixels(buffer, 0, width, 0, y, width, rows)
+                NativeTone.applyBasic(buffer, width * rows, parameters)
                 output.setPixels(buffer, 0, width, 0, y, width, rows)
             }
             currentCoroutineContext().ensureActive()
-            if (edit.turns == 0) return output
-            val rotated = Bitmap.createBitmap(output, 0, 0, width, height,
-                Matrix().apply { setRotate(edit.turns * 90f) }, false)
-            if (rotated !== output) output.recycle()
-            return rotated
+            if (edit.straighten != 0f) {
+                val straight = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+                val scale = Geometry.straightenScale(width, height, edit.straighten)
+                val matrix = Matrix().apply {
+                    postTranslate(-width/2f, -height/2f)
+                    postRotate(edit.straighten)
+                    postScale(scale, scale)
+                    postTranslate(width/2f, height/2f)
+                }
+                Canvas(straight).drawBitmap(output, matrix, Paint(Paint.FILTER_BITMAP_FLAG))
+                output.recycle(); output = straight
+            }
+            if (edit.flipHorizontal || edit.flipVertical || edit.turns != 0) {
+                val matrix = Matrix().apply {
+                    setScale(if (edit.flipHorizontal) -1f else 1f, if (edit.flipVertical) -1f else 1f)
+                    postRotate(edit.turns * 90f)
+                }
+                val transformed = Bitmap.createBitmap(output, 0, 0, width, height, matrix, false)
+                if (transformed !== output) { output.recycle(); output = transformed }
+            }
+            edit.crop?.let { crop ->
+                val cropped = Bitmap.createBitmap(output,crop.x,crop.y,crop.width,crop.height)
+                if (cropped !== output) { output.recycle(); output = cropped }
+            }
+            if (edit.sharpen != 0f) {
+                val sharp = Bitmap.createBitmap(output.width, output.height, Bitmap.Config.ARGB_8888)
+                try {
+                    val w = output.width
+                    val input = IntArray(w * minOf(34, output.height))
+                    val destination = IntArray(input.size)
+                    for (y in 0 until output.height step 32) {
+                        currentCoroutineContext().ensureActive()
+                        val first = maxOf(0, y-1)
+                        val last = minOf(output.height, y+33)
+                        val rows = minOf(32, output.height-y)
+                        output.getPixels(input, 0, w, 0, first, w, last-first)
+                        NativeTone.sharpen(input, destination, w, last-first, edit.sharpen)
+                        sharp.setPixels(destination, (y-first)*w, w, 0, y, w, rows)
+                    }
+                } catch (error: Throwable) { sharp.recycle(); throw error }
+                output.recycle(); output = sharp
+            }
+            if (edit.vignette != 0f) {
+                val w = output.width
+                val strip = IntArray(w * minOf(32, output.height))
+                for (y in 0 until output.height step 32) {
+                    currentCoroutineContext().ensureActive()
+                    val rows = minOf(32, output.height-y)
+                    output.getPixels(strip, 0, w, 0, y, w, rows)
+                    NativeTone.vignette(strip, w, output.height, y, rows, edit.vignette)
+                    output.setPixels(strip, 0, w, 0, y, w, rows)
+                }
+            }
+            return output
         } catch (error: Throwable) { output.recycle(); throw error }
     }
 

@@ -6,6 +6,8 @@ import android.graphics.Bitmap
 import android.net.Uri
 import dev.nijiframe.editor.Project
 import dev.nijiframe.editor.ProjectIO
+import dev.nijiframe.editor.ExportSettings
+import dev.nijiframe.editor.PhotoFormat
 import java.io.File
 
 /** All external content is copied into a self-contained project before it becomes editable. */
@@ -37,11 +39,17 @@ class ProjectRepository(private val context: Context) {
     fun exportProject(project: Project, uri: Uri) {
         requireNotNull(resolver.openOutputStream(uri, "wt")) { "无法写入工程" }.use { ProjectIO.write(project, it) }
     }
-    suspend fun exportPhoto(project: Project, source: Bitmap, uri: Uri) {
-        val rendered = ImagePipeline.render(source, project.manifest.edit)
+    suspend fun exportPhoto(project: Project, source: Bitmap, uri: Uri, settings: ExportSettings = ExportSettings()) {
+        var rendered = ImagePipeline.render(source, project.manifest.edit)
         try {
+            val (width, height) = settings.dimensions(rendered.width, rendered.height)
+            if (width != rendered.width || height != rendered.height) {
+                val reduced = Bitmap.createScaledBitmap(rendered, width, height, true)
+                rendered.recycle(); rendered = reduced
+            }
+            val format = if (settings.format == PhotoFormat.JPEG) Bitmap.CompressFormat.JPEG else Bitmap.CompressFormat.PNG
             requireNotNull(resolver.openOutputStream(uri, "wt")) { "无法写入照片" }.use {
-                check(rendered.compress(Bitmap.CompressFormat.JPEG, 95, it)) { "照片编码失败" }
+                check(rendered.compress(format, settings.quality, it)) { "照片编码失败" }
             }
         } finally { rendered.recycle() }
     }

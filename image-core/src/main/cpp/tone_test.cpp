@@ -3,6 +3,8 @@
 #include <cassert>
 #include <cmath>
 #include <limits>
+#include <vector>
+#include <algorithm>
 int main() {
     uint32_t pixels[] = {0xff000000, 0xff808080, 0xffff0000, 0xff00ff00, 0xff0000ff, 0xffffffff};
     assert(nf_tone(pixels, 6, 0, 1) == 0 && pixels[1] == 0xff808080);
@@ -14,4 +16,26 @@ int main() {
     assert(nf_tone(nullptr, 1, 0, 1) == -1);
     assert(nf_tone(pixels, 6, std::numeric_limits<float>::quiet_NaN(), 1) == -1);
     assert(nf_tone(pixels, 6, 0, 3) == -1);
+    nf_adjustments controls{0,1,0,0,0,0,0,0,0,0};
+    uint32_t neutral[] = {0xff234567, 0xffaabbcc};
+    assert(nf_basic_tone(neutral, 2, &controls) == 0 && neutral[0] == 0xff234567 && neutral[1] == 0xffaabbcc);
+    controls.warmth = 1;
+    uint32_t gray = 0xff808080;
+    assert(nf_basic_tone(&gray, 1, &controls) == 0 && ((gray>>16)&255) > (gray&255));
+    controls.saturation = 0;
+    assert(nf_basic_tone(&gray, 1, &controls) == 0 && ((gray>>16)&255) == (gray&255));
+    controls.tint = std::numeric_limits<float>::infinity();
+    assert(nf_basic_tone(&gray, 1, &controls) == -1);
+    std::vector<uint32_t> constant(81,0xff808080), sharp(81), vignette(81,0xff808080);
+    assert(nf_sharpen(constant.data(),sharp.data(),9,9,2) == 0 && constant == sharp);
+    constant[40] = 0xff909090;
+    assert(nf_sharpen(constant.data(),sharp.data(),9,9,1) == 0 && (sharp[40]&255) > 144);
+    assert(nf_sharpen(constant.data(),constant.data(),9,9,1) == -1);
+    assert(nf_vignette(vignette.data(),9,9,0,9,1) == 0);
+    assert(vignette[40] == 0xff808080 && (vignette[0]&255) < 128 && vignette[0] == vignette[80]);
+    std::vector<uint32_t> chunks(81,0xff808080);
+    assert(nf_vignette(chunks.data(),9,9,0,4,1) == 0);
+    assert(nf_vignette(chunks.data()+36,9,9,4,5,1) == 0);
+    assert(chunks == vignette);
+    assert(nf_vignette(chunks.data(),9,9,8,2,1) == -1);
 }

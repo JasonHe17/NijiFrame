@@ -82,12 +82,9 @@ private fun EditorScreen(editor: EditorViewModel) {
                             translationX = offset.x; translationY = offset.y }) }
                     if (ui.rendering) CircularProgressIndicator(Modifier.size(28.dp))
                 }
-                val crop = edit?.crop
-                val width = crop?.width ?: project.manifest.width
-                val height = crop?.height ?: project.manifest.height
-                val rotated = (edit?.turns ?: 0) % 2 == 1
+                val (width,height) = dev.nijiframe.editor.Geometry.outputSize(project.manifest.width,project.manifest.height,requireNotNull(edit))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("${if (rotated) height else width} × ${if (rotated) width else height} · sRGB",
+                    Text("${width} × ${height} · sRGB",
                         Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
                     TextButton(onClick = { zoom = 1f; offset = Offset.Zero }) { Text("适应画布") }
                 }
@@ -95,11 +92,11 @@ private fun EditorScreen(editor: EditorViewModel) {
                     Adjustment("曝光", edit.exposureEv, -3f..3f, "EV", !ui.busy, { editor.previewEdit(edit.copy(exposureEv = it)) }) { editor.commit(edit.copy(exposureEv = it)) }
                     Adjustment("饱和度", edit.saturation, 0f..2f, "", !ui.busy, { editor.previewEdit(edit.copy(saturation = it)) }) { editor.commit(edit.copy(saturation = it)) }
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        OutlinedButton(enabled = !ui.busy, onClick = { editor.commit(edit.copy(turns = (edit.turns + 1) % 4)) }) { Text("旋转 90°") }
+                        OutlinedButton(enabled = !ui.busy, onClick = { editor.commit(dev.nijiframe.editor.Geometry.rotate(edit,project.manifest.width,project.manifest.height)) }) { Text("旋转 90°") }
                         OutlinedButton(enabled = !ui.busy, onClick = {
                             val m = project.manifest
-                            val size = minOf(m.width, m.height)
-                            editor.commit(edit.copy(crop = if (edit.crop != null) null else Crop((m.width - size) / 2, (m.height - size) / 2, size, size)))
+                            val (w,h) = dev.nijiframe.editor.Geometry.canvasSize(m.width,m.height,edit.turns)
+                            editor.commit(edit.copy(crop = if (edit.crop != null) null else dev.nijiframe.editor.Geometry.centeredCrop(w,h,1f)))
                         }) { Text(if (edit.crop == null) "居中方形裁剪" else "取消裁剪") }
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {

@@ -13,3 +13,44 @@ Java_dev_nijiframe_image_NativeTone_apply(JNIEnv* env, jobject, jintArray array,
     env->ReleaseIntArrayElements(array, pixels, 0);
     if (result != 0) env->ThrowNew(env->FindClass("java/lang/IllegalArgumentException"), "Invalid tone parameters");
 }
+
+
+static void invalid(JNIEnv* env) {
+    env->ThrowNew(env->FindClass("java/lang/IllegalArgumentException"), "Invalid pixel operation");
+}
+extern "C" JNIEXPORT void JNICALL
+Java_dev_nijiframe_image_NativeTone_applyBasic(JNIEnv* env, jobject, jintArray array, jint count, jfloatArray params) {
+    if (!array || !params || count < 0 || count > env->GetArrayLength(array) || env->GetArrayLength(params) != 10) { invalid(env); return; }
+    jfloat values[10];
+    env->GetFloatArrayRegion(params, 0, 10, values);
+    if (env->ExceptionCheck()) return;
+    nf_adjustments p{values[0], values[1], values[2], values[3], values[4], values[5], values[6], values[7], values[8], values[9]};
+    jint* pixels = env->GetIntArrayElements(array, nullptr);
+    if (!pixels) return;
+    const int result = nf_basic_tone(reinterpret_cast<uint32_t*>(pixels), static_cast<size_t>(count), &p);
+    env->ReleaseIntArrayElements(array, pixels, 0);
+    if (result != 0) invalid(env);
+}
+extern "C" JNIEXPORT void JNICALL
+Java_dev_nijiframe_image_NativeTone_sharpen(JNIEnv* env, jobject, jintArray source, jintArray destination, jint width, jint height, jfloat amount) {
+    const int64_t size = static_cast<int64_t>(width)*height;
+    if (!source || !destination || env->IsSameObject(source, destination) || width <= 0 || height <= 0 ||
+        size > env->GetArrayLength(source) || size > env->GetArrayLength(destination)) { invalid(env); return; }
+    jint* input = env->GetIntArrayElements(source, nullptr);
+    if (!input) return;
+    jint* output = env->GetIntArrayElements(destination, nullptr);
+    if (!output) { env->ReleaseIntArrayElements(source, input, JNI_ABORT); return; }
+    const int result = nf_sharpen(reinterpret_cast<uint32_t*>(input), reinterpret_cast<uint32_t*>(output), width, height, amount);
+    env->ReleaseIntArrayElements(source, input, JNI_ABORT);
+    env->ReleaseIntArrayElements(destination, output, 0);
+    if (result != 0) invalid(env);
+}
+extern "C" JNIEXPORT void JNICALL
+Java_dev_nijiframe_image_NativeTone_vignette(JNIEnv* env, jobject, jintArray array, jint width, jint full_height, jint first_row, jint rows, jfloat amount) {
+    if (!array || width <= 0 || rows <= 0 || static_cast<int64_t>(width)*rows > env->GetArrayLength(array)) { invalid(env); return; }
+    jint* pixels = env->GetIntArrayElements(array, nullptr);
+    if (!pixels) return;
+    const int result = nf_vignette(reinterpret_cast<uint32_t*>(pixels), width, full_height, first_row, rows, amount);
+    env->ReleaseIntArrayElements(array, pixels, 0);
+    if (result != 0) invalid(env);
+}

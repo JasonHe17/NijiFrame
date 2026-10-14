@@ -5,6 +5,7 @@ import java.io.*
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.security.MessageDigest
+import java.util.zip.ZipFile
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
@@ -34,6 +35,13 @@ object ProjectIO {
         return out.toByteArray()
     }
 
+    /** Catalog metadata only; opening for editing still validates the entire resource package. */
+    fun inspect(file: File): Manifest = ZipFile(file).use { zip ->
+        val entry = requireNotNull(zip.getEntry("project.json")) { "Missing project manifest" }
+        val bytes = zip.getInputStream(entry).use { readBounded(it, MAX_MANIFEST_BYTES) }
+        json.decodeFromString<Manifest>(bytes.decodeToString(throwOnInvalidSequence = true)).also { it.validate() }.current()
+    }
+
     fun read(input: InputStream): Project {
         // Never extract paths to a filesystem. Only these two regular payloads are accepted.
         val entries = mutableMapOf<String, ByteArray>()
@@ -54,7 +62,7 @@ object ProjectIO {
         manifest.validate()
         val original = entries.getValue(manifest.source)
         require(original.size == manifest.sourceBytes && digest(original) == manifest.sourceSha256) { "Source integrity check failed" }
-        return Project(manifest, original)
+        return Project(manifest.current(), original)
     }
 
     // Version 1 deliberately excludes comments, ZIP64, encryption and special files.
