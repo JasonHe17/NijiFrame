@@ -67,6 +67,19 @@ class ProjectTest {
     @Test fun resourceBoundIsEnforcedDuringRead() {
         assertThrows(IllegalArgumentException::class.java) { ProjectIO.readBounded(ByteArray(33).inputStream(), 32) }
     }
+    @Test fun compressedResourcesRetainBulkWritesAtTheStorageBoundary() {
+        val bytes=ByteArray(64*1024).also {java.util.Random(1).nextBytes(it)}
+        val output=object : OutputStream() {
+            var singleWrites=0
+            var bulkBytes=0
+            override fun write(value: Int) {singleWrites++}
+            override fun write(buffer: ByteArray,offset: Int,length: Int) {bulkBytes+=length}
+        }
+        ProjectIO.write(ProjectIO.create(bytes,100,100),output)
+        assertTrue("ZIP payload must not become per-byte storage calls",output.singleWrites<1024)
+        assertTrue("The incompressible source should be sent in blocks",output.bulkBytes>bytes.size/2)
+    }
+
     @Test fun failedSavePreservesPreviousProjectAndCleansTemporaryFile() {
         val directory = Files.createTempDirectory("nijiframe-test").toFile()
         try {

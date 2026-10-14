@@ -107,6 +107,8 @@ object ProjectIO {
             digest(project.original) == project.manifest.sourceSha256) { "Source integrity check failed" }
         // Close the deflater while retaining the caller's stream for fsync.
         ZipOutputStream(object : FilterOutputStream(output) {
+            // FilterOutputStream otherwise expands a bulk write into one syscall per byte.
+            override fun write(bytes: ByteArray, offset: Int, length: Int) { output.write(bytes, offset, length) }
             override fun close() { flush() }
         }).use { zip ->
         for ((name, bytes) in listOf("project.json" to json.encodeToString(project.manifest).encodeToByteArray(),

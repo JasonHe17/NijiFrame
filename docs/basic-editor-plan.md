@@ -1,6 +1,6 @@
 # Basic mobile editor delivery
 
-Status: in progress. This checklist defines the requested complete basic editor, not just the earlier import/export foundation. Advanced portrait, local repair, AI, elaborate animation and Windows execution are deferred. Keep portable edit semantics and processing boundaries for future platforms.
+Status: implementation complete; delivery requires the reviewed commit to pass the checks below. This checklist defines the requested complete basic editor, not just the earlier import/export foundation. Advanced portrait, local repair, AI, elaborate animation and Windows execution are deferred. Keep portable edit semantics and processing boundaries for future platforms.
 
 ## Evidence and scope
 
@@ -34,3 +34,18 @@ A missing GitHub login delays hosted CI only; local implementation and checks co
 ## Patent and dependency boundary
 
 The current scope uses explicit global adjustments, geometric transforms, a small unsharp mask and radial vignette. No face/skin detector, learned retouching, edge-snapping brush or server-controlled effect sharing is introduced. Existing patent research remains a list of engineering investigation leads, not clearance. Review the actual new processing and UI together with relevant claims/designs; independence of source code or a permissive dependency license is not a third-party patent opinion. New dependencies/assets require provenance and license review.
+
+
+## Evidence map
+
+| Requirement group | Current sources / checks |
+| --- | --- |
+| Home and project management | `ProjectLibrary`, `ProjectRepository`, `ProjectCard`; `ProjectLibraryTest` and the real-picker UI flow |
+| Shell, canvas, tools and accessibility labels | `MainActivity`, `EditorTools`, `EditorCanvas`; UI flow checks pinch/pan/fit, crop handles, draft cancellation, Back, activity recreation and both orientations |
+| Image operations | `Edit`, `Geometry`, native `tone.cpp`, `ImagePipeline`; JVM geometry/migration checks, native sanitizer checks and Android geometry/detail/export checks |
+| Save and recovery | `ProjectIO`, `ProjectLibrary`, `EditorViewModel`; interrupted-write protection, independent copies, auto-save/new-viewmodel tests, plus manual force-stop recovery |
+| Export and sharing | `ExportSettings`, `ProjectRepository`, restricted FileProvider; JPEG/PNG pixel/size checks, real export picker and chooser flow |
+| Version control | `foundation-baseline` tag; separate core, CI and frontend commits on the feature branch |
+| Hosted CI | `.github/workflows/android.yml`: Linux build/native checks and API 29/36 tests; inspect the actual run attached to the reviewed commit |
+
+The real-photo check additionally exposed per-byte output amplification through FilterOutputStream. ProjectIO explicitly forwards bulk writes; a regression test fails on the preceding implementation and passes on the corrected writer. This is a storage-path correction, not a physical-phone performance claim.
