@@ -83,9 +83,9 @@ class EditorViewModel @JvmOverloads constructor(application: Application,
         actionJob=viewModelScope.launch {
             initialized.await()
             actions.withLock {
-                autoSaveJob?.cancelAndJoin()
+                // Disable competing actions before waiting for an in-flight automatic save.
                 mutable.value=mutable.value.copy(busy=true,saving=false,status=status,error=null,canCancel=true)
-                try { block() }
+                try { autoSaveJob?.cancelAndJoin();block() }
                 catch (cancelled: CancellationException) { mutable.value=mutable.value.copy(status="操作已取消，工程已保留");throw cancelled }
                 catch (error: Exception) { fail(error) }
                 catch (_: OutOfMemoryError) { mutable.value=mutable.value.copy(error="可用内存不足，请使用较小图片",rendering=false) }
@@ -264,6 +264,7 @@ class EditorViewModel @JvmOverloads constructor(application: Application,
         }
         mutable.value=mutable.value.copy(exportRequest=destination,status="请选择保存位置")
     }
+    fun cancelExportSelection() {mutable.value=mutable.value.copy(status="已取消导出")}
     fun consumeExportRequest() {mutable.value=mutable.value.copy(exportRequest=null)}
     fun exportProject(uri: Uri) = action("正在导出工程") {
         saveCurrentIfNeeded()

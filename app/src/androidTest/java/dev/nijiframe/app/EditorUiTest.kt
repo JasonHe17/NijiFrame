@@ -129,6 +129,13 @@ class EditorUiTest {
             await {library.read(id).manifest.edit.saturation<1f}
             scenario.onActivity {it.requestedOrientation=ActivityInfo.SCREEN_ORIENTATION_PORTRAIT}
             text("导出");tap("导出");tap("PNG");tap("保存照片")
+            val savedBeforeCancel=library.read(id).manifest
+            device.findObject(UiSelector().className("android.widget.EditText")).waitForExists(10_000)
+            device.pressBack();device.waitForIdle()
+            if(device.currentPackageName!=context.packageName) device.pressBack()
+            text("已取消导出")
+            assertEquals(savedBeforeCancel,library.read(id).manifest)
+            tap("导出");tap("保存照片")
             val field=device.findObject(UiSelector().className("android.widget.EditText"))
             check(field.waitForExists(10_000));field.setText(exportName)
             tap("SAVE")

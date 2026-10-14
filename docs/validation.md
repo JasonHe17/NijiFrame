@@ -10,6 +10,8 @@
 | `EditorUiTest` | Real system picker, pinch/pan/fit, draft cancel/apply, activity recreation, undo/redo, drag crop, flip, system Back with pending edits, landscape and portrait, PNG picker export and decoded pixels/dimensions, sharesheet, project duplicate/delete/rename/reopen |
 | `:app:lintDebug`, `:app:assembleDebug` | Android static analysis and both configured native ABIs |
 
+Use a dedicated test installation: the Gradle runner installs/uninstalls APKs, so export any projects that must survive a test run.
+
 The UI test uses synthetic images and the actual system picker; it does not inject fake activity results or disable rendering. Accessibility locators are refreshed at interaction boundaries to avoid using stale nodes after Compose/DocumentUI updates. It uses UIAutomator 2.4.0. API 34+ accessibility-cache clearing is confined to test code. Runtime behavior does not depend on testing switches.
 
 GitHub Actions runs Linux build/native checks and API 29/36 Android jobs. Workflow reports, APKs, and available UI evidence are retained as artifacts for seven days. Always inspect checks on the commit being reviewed; a configuration file alone is not proof that remote CI passed.

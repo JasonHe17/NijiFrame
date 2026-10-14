@@ -52,9 +52,9 @@ internal fun NijiFrame(editor: EditorViewModel) {
     val context=LocalContext.current
     val import=rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { it?.let(editor::importPhoto) }
     val open=rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { it?.let(editor::open) }
-    val projectExport=rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { it?.let(editor::exportProject) }
-    val jpegExport=rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("image/jpeg")) { it?.let {uri -> editor.exportPhoto(uri,PhotoFormat.JPEG)} }
-    val pngExport=rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("image/png")) { it?.let {uri -> editor.exportPhoto(uri,PhotoFormat.PNG)} }
+    val projectExport=rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { if(it==null) editor.cancelExportSelection() else editor.exportProject(it) }
+    val jpegExport=rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("image/jpeg")) { if(it==null) editor.cancelExportSelection() else editor.exportPhoto(it,PhotoFormat.JPEG) }
+    val pngExport=rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("image/png")) { if(it==null) editor.cancelExportSelection() else editor.exportPhoto(it,PhotoFormat.PNG) }
     var showExport by rememberSaveable { mutableStateOf(false) }
     var showReset by rememberSaveable { mutableStateOf(false) }
     var showBack by rememberSaveable { mutableStateOf(false) }

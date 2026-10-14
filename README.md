@@ -35,7 +35,7 @@ sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'ndk;28.2.13676358' 'cmak
 
 APK：`app/build/outputs/apk/debug/app-debug.apk`，包含 arm64-v8a 和 x86_64。配置最低 API 26，实际验证范围单独记录，不以配置代替设备验证。
 
-连接 API 29+ 模拟器／设备后，可运行包含真实系统选择器和触控流程的 Android 检查：
+使用专用 API 29+ 测试模拟器运行包含真实系统选择器和触控流程的 Android 检查。运行器会重装／卸载测试应用，需要保留的工程请先导出：
 
 ```sh
 ./gradlew :app:connectedDebugAndroidTest
