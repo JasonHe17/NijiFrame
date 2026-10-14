@@ -64,7 +64,10 @@ internal fun EditorCanvas(ui: EditorUi, editor: EditorViewModel, modifier: Modif
         if(ui.comparing) Surface(Modifier.align(Alignment.TopStart).padding(12.dp),shape=MaterialTheme.shapes.small) {
             Text("原图",Modifier.padding(8.dp),style=MaterialTheme.typography.labelMedium)
         }
-        if(!cropMode) TextButton(onClick={zoom=1f;pan=Offset.Zero},modifier=Modifier.align(Alignment.BottomEnd)) {Text("适应画布")}
+        if(!cropMode) Surface(Modifier.align(Alignment.BottomEnd).padding(8.dp),shape=MaterialTheme.shapes.small,
+            color=MaterialTheme.colorScheme.surface.copy(alpha=.9f)) {
+            TextButton(onClick={zoom=1f;pan=Offset.Zero}) {Text("适应画布")}
+        }
     }
 }
 
@@ -110,11 +113,15 @@ private fun CropOverlay(crop: Crop,width: Int,height: Int,aspect: Float?,onCrop:
         drawRect(shade,Offset(0f,r.bottom),Size(this.size.width,max(0f,this.size.height-r.bottom)))
         drawRect(shade,Offset(0f,r.top),Size(max(0f,r.left),r.height))
         drawRect(shade,Offset(r.right,r.top),Size(max(0f,this.size.width-r.right),r.height))
+        drawRect(Color.Black.copy(alpha=.8f),r.topLeft,r.size,style=Stroke(4.dp.toPx()))
         drawRect(Color.White,r.topLeft,r.size,style=Stroke(2.dp.toPx()))
         for(i in 1..2) {
             drawLine(Color.White.copy(alpha=.6f),Offset(r.left+r.width*i/3,r.top),Offset(r.left+r.width*i/3,r.bottom),1.dp.toPx())
             drawLine(Color.White.copy(alpha=.6f),Offset(r.left,r.top+r.height*i/3),Offset(r.right,r.top+r.height*i/3),1.dp.toPx())
         }
-        for(corner in listOf(r.topLeft,r.topRight,r.bottomLeft,r.bottomRight)) drawCircle(Color.White,6.dp.toPx(),corner)
+        for(corner in listOf(r.topLeft,r.topRight,r.bottomLeft,r.bottomRight)) {
+            drawCircle(Color.Black.copy(alpha=.8f),8.dp.toPx(),corner)
+            drawCircle(Color.White,6.dp.toPx(),corner)
+        }
     }
 }
