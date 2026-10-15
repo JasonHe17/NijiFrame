@@ -38,4 +38,14 @@ int main() {
     assert(nf_vignette(chunks.data()+36,9,9,4,5,1) == 0);
     assert(chunks == vignette);
     assert(nf_vignette(chunks.data(),9,9,8,2,1) == -1);
+    // Local exposure leaves zero coverage untouched and uses linear-light gain at full coverage.
+    uint32_t local[] = {0xff808080u,0xff808080u,0xff808080u};
+    const uint8_t mask[] = {0,128,255};
+    assert(nf_local_exposure(local,mask,3,1.0f)==0);
+    assert(local[0]==0xff808080u);
+    assert((local[1]&255)>128 && (local[1]&255)<(local[2]&255));
+    uint32_t full=0xff808080u;assert(nf_tone(&full,1,1.0f,1.0f)==0);assert(local[2]==full);
+    const uint32_t unchanged=local[1];assert(nf_local_exposure(local,mask,3,0.0f)==0);assert(local[1]==unchanged);
+    assert(nf_local_exposure(local,nullptr,3,1.0f)==-1);
+    assert(nf_local_exposure(local,mask,3,4.0f)==-1);
 }

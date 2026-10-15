@@ -7,7 +7,7 @@ import android.graphics.ColorSpace
 import android.graphics.Matrix
 import android.graphics.Canvas
 import android.graphics.Paint
-import dev.nijiframe.editor.Geometry
+import dev.nijiframe.editor.*
 import android.os.Build
 import androidx.exifinterface.media.ExifInterface
 import dev.nijiframe.editor.Edit
@@ -69,12 +69,21 @@ object ImagePipeline {
             // Bounded strips keep global tone processing cancellable without a full pixel-array copy.
             val parameters = floatArrayOf(edit.exposureEv, edit.saturation, edit.contrast, edit.highlights,
                 edit.shadows, edit.whites, edit.blacks, edit.warmth, edit.tint, edit.vibrance)
+            val context=currentCoroutineContext()
+            val mask=if(edit.local.exposureEv!=0f && edit.local.region.strokes.isNotEmpty())
+                MaskRaster.create(edit.local.region,width,height) {context.ensureActive()} else null
             val buffer = IntArray(width * minOf(32, height))
+            val maskStrip=if(mask!=null) ByteArray(buffer.size) else null
             for (y in 0 until height step 32) {
                 currentCoroutineContext().ensureActive()
                 val rows = minOf(32, height - y)
                 source.getPixels(buffer, 0, width, 0, y, width, rows)
                 NativeTone.applyBasic(buffer, width * rows, parameters)
+                if(mask!=null && maskStrip!=null) {
+                    for(row in 0 until rows) for(x in 0 until width)
+                        maskStrip[row*width+x]=mask.sample((x+.5f)/width,(y+row+.5f)/height).toByte()
+                    NativeTone.localExposure(buffer,maskStrip,width*rows,edit.local.exposureEv)
+                }
                 output.setPixels(buffer, 0, width, 0, y, width, rows)
             }
             currentCoroutineContext().ensureActive()
@@ -133,6 +142,41 @@ object ImagePipeline {
             }
             return output
         } catch (error: Throwable) { output.recycle(); throw error }
+    }
+
+    fun interactiveSource(source: Bitmap): Bitmap? {
+        if(maxOf(source.width,source.height)<=1600) return null
+        val scale=800f/maxOf(source.width,source.height)
+        return Bitmap.createScaledBitmap(source,maxOf(1,(source.width*scale).toInt()),maxOf(1,(source.height*scale).toInt()),true)
+    }
+    fun scaledEdit(edit: Edit,width: Int,height: Int,scaledWidth: Int,scaledHeight: Int): Edit {
+        val (w,h)=Geometry.canvasSize(width,height,edit.turns)
+        val (sw,sh)=Geometry.canvasSize(scaledWidth,scaledHeight,edit.turns)
+        val crop=edit.crop?.let {
+            val x=(it.x.toLong()*sw/w).toInt().coerceIn(0,sw-1)
+            val y=(it.y.toLong()*sh/h).toInt().coerceIn(0,sh-1)
+            val right=((it.x.toLong()+it.width)*sw/w).toInt().coerceIn(x+1,sw)
+            val bottom=((it.y.toLong()+it.height)*sh/h).toInt().coerceIn(y+1,sh)
+            Crop(x,y,right-x,bottom-y)
+        }
+        return edit.copy(crop=crop)
+    }
+
+    suspend fun regionOverlay(width: Int,height: Int,edit: Edit): Bitmap {
+        val context=currentCoroutineContext()
+        val mask=MaskRaster.create(edit.local.region,width,height) {context.ensureActive()}
+        val pixels=IntArray(mask.coverage.size) { ((mask.coverage[it].toInt() and 255)*110/255 shl 24) or 0x00ff4060 }
+        val input=Bitmap.createBitmap(pixels,mask.width,mask.height,Bitmap.Config.ARGB_8888)
+        val (ow,oh)=Geometry.outputSize(width,height,edit)
+        val scale=minOf(1f,1600f/maxOf(ow,oh))
+        val output=Bitmap.createBitmap(maxOf(1,(ow*scale).toInt()),maxOf(1,(oh*scale).toInt()),Bitmap.Config.ARGB_8888)
+        val mapping=SourceGeometry(width,height,edit)
+        val points=listOf(MaskPoint(0f,0f),MaskPoint(1f,0f),MaskPoint(0f,1f)).map(mapping::toOutput)
+        val target=floatArrayOf(points[0].x*output.width/ow,points[0].y*output.height/oh,
+            points[1].x*output.width/ow,points[1].y*output.height/oh,points[2].x*output.width/ow,points[2].y*output.height/oh)
+        val matrix=Matrix().apply {setPolyToPoly(floatArrayOf(0f,0f,mask.width.toFloat(),0f,0f,mask.height.toFloat()),0,target,0,3)}
+        try {Canvas(output).drawBitmap(input,matrix,Paint(Paint.FILTER_BITMAP_FLAG))} finally {input.recycle()}
+        return output
     }
 
     fun preview(full: Bitmap): Bitmap {

@@ -105,3 +105,19 @@ int nf_vignette(uint32_t* pixels, int width, int full_height, int first_row, int
     }
     return 0;
 }
+
+int nf_local_exposure(uint32_t* pixels, const uint8_t* mask, size_t count, float ev) {
+    if ((!pixels && count) || (!mask && count) || !std::isfinite(ev) || ev < -3 || ev > 3) return -1;
+    if (ev == 0) return 0;
+    float lut[256];
+    for (int i=0;i<256;++i) lut[i]=linear(static_cast<float>(i)/255.0f);
+    const float gain=std::exp2(ev)-1.0f;
+    for (size_t i=0;i<count;++i) {
+        if (mask[i]==0) continue;
+        const auto p=pixels[i];
+        const float multiplier=1.0f+gain*mask[i]/255.0f;
+        pixels[i]=0xff000000u | (encoded(lut[(p>>16)&255]*multiplier)<<16) |
+            (encoded(lut[(p>>8)&255]*multiplier)<<8) | encoded(lut[p&255]*multiplier);
+    }
+    return 0;
+}

@@ -122,8 +122,10 @@ internal fun NijiFrame(editor: EditorViewModel) {
                             else if(ui.saving) "自动保存中" else if(ui.dirty) "未保存" else "已保存",
                             style=MaterialTheme.typography.labelSmall)
                     }
-                    TextButton(onClick=editor::undo,enabled=ui.canUndo && ui.tool==null && !ui.busy) { Text("撤销") }
-                    TextButton(onClick=editor::redo,enabled=ui.canRedo && ui.tool==null && !ui.busy) { Text("重做") }
+                    TextButton(onClick={if(ui.tool==EditorTool.LOCAL) editor.localUndo() else editor.undo()},enabled=!ui.busy &&
+                        (if(ui.tool==EditorTool.LOCAL) ui.localCanUndo else ui.canUndo && ui.tool==null)) { Text("撤销") }
+                    TextButton(onClick={if(ui.tool==EditorTool.LOCAL) editor.localRedo() else editor.redo()},enabled=!ui.busy &&
+                        (if(ui.tool==EditorTool.LOCAL) ui.localCanRedo else ui.canRedo && ui.tool==null)) { Text("重做") }
                     var menu by remember { mutableStateOf(false) }
                     Box {
                         IconButton(onClick={menu=true},enabled=!ui.busy,modifier=Modifier.semantics {contentDescription="编辑菜单"}) { Text("⋮") }

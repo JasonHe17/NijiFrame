@@ -4,6 +4,8 @@ package dev.nijiframe.app
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.rememberTransformableState
@@ -34,10 +36,14 @@ import kotlin.math.*
 @Composable
 internal fun EditorCanvas(ui: EditorUi, editor: EditorViewModel, modifier: Modifier=Modifier) {
     var size by remember {mutableStateOf(IntSize.Zero)}
-    var zoom by remember(ui.projectId,ui.preview?.width,ui.preview?.height) {mutableFloatStateOf(1f)}
-    var pan by remember(ui.projectId,ui.preview?.width,ui.preview?.height) {mutableStateOf(Offset.Zero)}
+    val activeEdit=ui.draft ?: ui.project?.manifest?.edit
+    val logicalSize=ui.project?.manifest?.let { m -> activeEdit?.let { Geometry.outputSize(m.width,m.height,it) } }
+    var zoom by remember(ui.projectId,logicalSize) {mutableFloatStateOf(1f)}
+    var pan by remember(ui.projectId,logicalSize) {mutableStateOf(Offset.Zero)}
     val bitmap=ui.preview
     val cropMode=ui.tool==EditorTool.CROP && !ui.comparing
+    val localMode=ui.tool==EditorTool.LOCAL && !ui.comparing
+    val painting=localMode && ui.regionMode!=RegionMode.MOVE
     LaunchedEffect(cropMode) {zoom=1f;pan=Offset.Zero}
     val state=rememberTransformableState { factor,delta,_ ->
         if(!cropMode && bitmap!=null) {
@@ -49,7 +55,7 @@ internal fun EditorCanvas(ui: EditorUi, editor: EditorViewModel, modifier: Modif
         }
     }
     Box(modifier.clipToBounds().background(Color(0xff101114)).onSizeChanged {size=it}
-        .then(if(cropMode) Modifier else Modifier.transformable(state).pointerInput(ui.projectId) {
+        .then(if(cropMode || painting) Modifier else Modifier.transformable(state).pointerInput(ui.projectId) {
             detectTapGestures(onDoubleTap={zoom=if(zoom>1f) 1f else 2f;pan=Offset.Zero})
         }),contentAlignment=Alignment.Center) {
         bitmap?.let { Image(it.asImageBitmap(),if(ui.comparing) "原图对比" else "编辑预览",
@@ -60,7 +66,17 @@ internal fun EditorCanvas(ui: EditorUi, editor: EditorViewModel, modifier: Modif
                 editor.updateDraft(ui.draft.copy(crop=it))
             }
         }
+        if(localMode && bitmap!=null && ui.project!=null && ui.draft!=null) {
+            if(ui.showRegion) ui.regionOverlay?.let { overlay ->
+                Image(overlay.asImageBitmap(),"已选择的局部区域",Modifier.fillMaxSize()
+                    .graphicsLayer {scaleX=zoom;scaleY=zoom;translationX=pan.x;translationY=pan.y},contentScale=ContentScale.Fit)
+            }
+            if(painting && !ui.busy) RegionInput(ui,editor,size,zoom,pan)
+        }
         if(ui.rendering) LinearProgressIndicator(Modifier.fillMaxWidth().align(Alignment.TopCenter))
+        if(ui.approximatePreview) Surface(Modifier.align(Alignment.TopEnd).padding(8.dp),shape=MaterialTheme.shapes.small) {
+            Text("快速预览 · 正在精算",Modifier.padding(8.dp),style=MaterialTheme.typography.labelSmall)
+        }
         if(ui.comparing) Surface(Modifier.align(Alignment.TopStart).padding(12.dp),shape=MaterialTheme.shapes.small) {
             Text("原图",Modifier.padding(8.dp),style=MaterialTheme.typography.labelMedium)
         }
@@ -122,6 +138,63 @@ private fun CropOverlay(crop: Crop,width: Int,height: Int,aspect: Float?,onCrop:
         for(corner in listOf(r.topLeft,r.topRight,r.bottomLeft,r.bottomRight)) {
             drawCircle(Color.Black.copy(alpha=.8f),8.dp.toPx(),corner)
             drawCircle(Color.White,6.dp.toPx(),corner)
+        }
+    }
+}
+
+@Composable
+private fun RegionInput(ui: EditorUi,editor: EditorViewModel,size: IntSize,zoom: Float,pan: Offset) {
+    val manifest=requireNotNull(ui.project).manifest
+    val edit=requireNotNull(ui.draft)
+    val (w,h)=Geometry.outputSize(manifest.width,manifest.height,edit)
+    val mapping=remember(manifest.width,manifest.height,edit) {SourceGeometry(manifest.width,manifest.height,edit)}
+    val bounds=imageBounds(size,w,h)
+    var pending by remember {mutableStateOf<List<MaskPoint>>(emptyList())}
+    fun screen(point: MaskPoint): Offset {
+        val output=mapping.toOutput(point)
+        return Offset((bounds.left+output.x*bounds.width/w-size.width/2f)*zoom+size.width/2f+pan.x,
+            (bounds.top+output.y*bounds.height/h-size.height/2f)*zoom+size.height/2f+pan.y)
+    }
+    Canvas(Modifier.fillMaxSize().semantics {contentDescription="局部区域画布"}
+        .pointerInput(mapping,size,zoom,pan,ui.regionMode,ui.brushRadius,ui.brushHardness) {
+            if(bounds.width<=0) return@pointerInput
+            awaitEachGesture {
+                val down=awaitFirstDown(requireUnconsumed=false)
+                fun convert(p: Offset): MaskPoint? {
+                    val px=(p.x-size.width/2f-pan.x)/zoom+size.width/2f
+                    val py=(p.y-size.height/2f-pan.y)/zoom+size.height/2f
+                    return mapping.toSource((px-bounds.left)*w/bounds.width,(py-bounds.top)*h/bounds.height)
+                }
+                val start=convert(down.position)
+                if(start!=null) {
+                    down.consume();pending=listOf(start)
+                    var cancelled=false
+                    try {
+                        while(true) {
+                            val event=awaitPointerEvent()
+                            if(event.changes.count {it.pressed}>1) {cancelled=true;break}
+                            val change=event.changes.firstOrNull {it.id==down.id} ?: break
+                            val point=convert(change.position)
+                            if(point!=null && pending.size<Region.MAX_POINTS) {
+                                val last=pending.last()
+                                // Bound event density in source units, not screen pixels.
+                                if(hypot((point.x-last.x)*manifest.width,(point.y-last.y)*manifest.height)>=
+                                    max(1f,ui.brushRadius*min(manifest.width,manifest.height)*.1f) || !change.pressed)
+                                    pending=pending+point
+                            }
+                            change.consume()
+                            if(!change.pressed) break
+                        }
+                        if(!cancelled) editor.addStroke(pending)
+                    } finally {pending=emptyList()}
+                }
+            }
+        }) {
+        // A single centerline indicates the pending gesture; the raster overlay shows exact coverage after release.
+        for(i in pending.indices) {
+            val p=screen(pending[i]);val previous=screen(pending[max(0,i-1)])
+            drawLine(if(ui.regionMode==RegionMode.ERASE) Color.Cyan else Color(0xffff4060),previous,p,3.dp.toPx())
+            drawCircle(Color.White,2.dp.toPx(),p)
         }
     }
 }
