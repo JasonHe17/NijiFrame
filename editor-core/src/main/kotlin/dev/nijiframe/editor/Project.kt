@@ -61,12 +61,15 @@ data class Manifest(
         }
         require(source == "assets/original" && sourceBytes in 1..ProjectIO.MAX_SOURCE_BYTES) { "Invalid resource" }
         require(sourceSha256.matches(Regex("[0-9a-f]{64}"))) { "Invalid resource digest" }
-        require(width > 0 && height > 0 && width.toLong() * height <= MAX_PIXELS) { "Unsupported image dimensions" }
+        require(width in 1..MAX_EDGE && height in 1..MAX_EDGE && width.toLong() * height <= MAX_PIXELS) { "Unsupported image dimensions" }
         edit.validate(width, height, sourceCrop = version == 1)
     }
     fun current(): Manifest = copy(version = 4, pipeline = "srgb-soften-v4",
         edit = if(version == 1) edit.copy(crop = edit.crop?.let { Geometry.legacyCrop(it,width,height,edit.turns) }) else edit)
-    companion object { const val MAX_PIXELS = 8_000_000L }
+    companion object {
+        const val MAX_PIXELS = 100_000_000L
+        const val MAX_EDGE = 32_768
+    }
 }
 
 data class Project(val manifest: Manifest, val original: ByteArray) {

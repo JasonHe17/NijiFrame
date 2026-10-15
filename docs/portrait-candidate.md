@@ -10,7 +10,7 @@ The precise radius, weights, blending, rounding and order are part of the [v4 pr
 
 ## Review before broader use
 
-Compare the original, low and medium strength, then inspect pores and high-contrast details at native scale. Higher strength and lower protection can remove texture; the protection control is not semantic understanding and cannot guarantee preservation of every facial detail. The fast preview is approximate, so wait for the exact result before evaluating quality.
+Compare the original, low and medium strength, then inspect pores and high-contrast details at native scale. Higher strength and lower protection can remove texture; the protection control is not semantic understanding and cannot guarantee preservation of every facial detail. The fast preview is approximate. Small images settle to a reference preview; large images retain a labeled reduced preview, so evaluate fine detail in an original-size export when memory allows.
 
 Research comparisons use separately licensed images outside this repository. Automatic-region failures remain failures; unchanged output on an empty mask is not counted as a successful retouch. New low-light and user-owned examples are still useful for evaluating this candidate, but user photographs must not be committed to the repository.
 

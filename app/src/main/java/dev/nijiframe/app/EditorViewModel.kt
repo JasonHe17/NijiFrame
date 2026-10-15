@@ -68,6 +68,7 @@ class EditorViewModel @JvmOverloads constructor(application: Application,
                     install(latest,loaded)
                 }
             } catch (error: Exception) { fail(error) }
+            catch (_: OutOfMemoryError) { mutable.value=mutable.value.copy(error="内存不足，未能重开工程；已保存文件仍保留，可从项目列表选择其他工程") }
             finally {
                 mutable.value=mutable.value.copy(busy=false,
                     status=if(mutable.value.project==null && mutable.value.error==null) "导入照片，开始编辑" else mutable.value.status)
@@ -249,10 +250,10 @@ class EditorViewModel @JvmOverloads constructor(application: Application,
             try {
                 if (debounce) delay(80)
                 val proxy=interactiveSource
-                // Interactive approximation is labeled; the settled full-resolution reference always replaces it.
+                // The settled render uses the loaded source, which is a bounded proxy for large originals.
                 if(proxy!=null) {
                     val fast=withContext(Dispatchers.Default) {pixelWork.withLock {
-                        ImagePipeline.render(proxy,ImagePipeline.scaledEdit(parameters,original.width,original.height,proxy.width,proxy.height))
+                        ImagePipeline.render(proxy,ImagePipeline.scaledEdit(parameters,project.manifest.width,project.manifest.height,proxy.width,proxy.height))
                     }}
                     if(ticket==generation) mutable.value=mutable.value.copy(preview=fast,approximatePreview=true)
                     else fast.recycle()
@@ -260,16 +261,17 @@ class EditorViewModel @JvmOverloads constructor(application: Application,
                 }
                 val (bitmap,overlay)=withContext(Dispatchers.Default) {
                     pixelWork.withLock {
-                        val bitmap=ImagePipeline.preview(ImagePipeline.render(original,parameters))
+                        val scaled=ImagePipeline.scaledEdit(parameters,project.manifest.width,project.manifest.height,original.width,original.height)
+                        val bitmap=ImagePipeline.preview(ImagePipeline.render(original,scaled))
                         try {
                             val overlay=if(state.tool==EditorTool.LOCAL && !state.comparing)
-                                ImagePipeline.regionOverlay(original.width,original.height,parameters) else null
+                                ImagePipeline.regionOverlay(project.manifest.width,project.manifest.height,parameters) else null
                             bitmap to overlay
                         } catch(error: Throwable) {bitmap.recycle();throw error}
                     }
                 }
                 if (ticket==generation) {
-                    mutable.value=mutable.value.copy(preview=bitmap,regionOverlay=overlay,rendering=false,approximatePreview=false)
+                    mutable.value=mutable.value.copy(preview=bitmap,regionOverlay=overlay,rendering=false,approximatePreview=original.width!=project.manifest.width || original.height!=project.manifest.height)
                     if (state.tool==null && !state.comparing && state.projectId!=null) {
                         withContext(Dispatchers.IO) { runCatching { repository.saveThumbnail(state.projectId,bitmap) } }
                     }
@@ -318,6 +320,12 @@ class EditorViewModel @JvmOverloads constructor(application: Application,
     fun prepareExport(destination: ExportDestination) = action("正在保存修改") {
         saveCurrentIfNeeded()
         val settings=mutable.value.exportSettings
+        if (destination == ExportDestination.PHOTO) {
+            renderJob?.cancelAndJoin()
+            withContext(Dispatchers.Default) {
+                repository.checkPhotoExport(requireNotNull(mutable.value.project), requireNotNull(source), settings)
+            }
+        }
         withContext(Dispatchers.IO) {
             check(preferences.edit().putString("format",settings.format.name).putInt("quality",settings.quality)
                 .putInt("edge",settings.maxEdge ?: 0).commit()) { "无法保存导出设置，请检查存储空间" }
@@ -333,7 +341,7 @@ class EditorViewModel @JvmOverloads constructor(application: Application,
         mutable.value=mutable.value.copy(status="可编辑工程已导出")
     }
     fun exportPhoto(uri: Uri, format: PhotoFormat? = null) = action("正在导出照片") {
-        saveCurrentIfNeeded()
+        saveCurrentIfNeeded();renderJob?.cancelAndJoin()
         val state=mutable.value
         withContext(Dispatchers.Default) { pixelWork.withLock {
             repository.exportPhoto(requireNotNull(state.project),requireNotNull(source),uri,
@@ -342,7 +350,7 @@ class EditorViewModel @JvmOverloads constructor(application: Application,
         mutable.value=mutable.value.copy(status="照片已导出，未复制原图元数据")
     }
     fun sharePhoto() = action("正在准备分享") {
-        saveCurrentIfNeeded();val state=mutable.value
+        saveCurrentIfNeeded();renderJob?.cancelAndJoin();val state=mutable.value
         val uri=withContext(Dispatchers.Default) { pixelWork.withLock {
             repository.sharePhoto(requireNotNull(state.project),requireNotNull(source),state.exportSettings)
         }}

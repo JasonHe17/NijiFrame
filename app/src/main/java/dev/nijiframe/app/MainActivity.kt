@@ -236,12 +236,15 @@ private fun ExportDialog(ui: EditorUi, editor: EditorViewModel, onDismiss: () ->
             }
             Text("照片尺寸：$outWidth × $outHeight")
             Column {
-                listOf(null to "原尺寸",2048 to "长边 2048",1280 to "长边 1280").forEach { (edge,label) ->
+                listOf(null to "原尺寸",4000 to "长边 4000",2048 to "长边 2048",1280 to "长边 1280").forEach { (edge,label) ->
                     Row(verticalAlignment=Alignment.CenterVertically) {
                         RadioButton(selected=settings.maxEdge==edge,onClick={editor.setExportSettings(settings.copy(maxEdge=edge))})
                         TextButton(onClick={editor.setExportSettings(settings.copy(maxEdge=edge))}) {Text(label)}
                     }
                 }
+            }
+            if (ImageSizing.previewSample(project.manifest.width, project.manifest.height) > 1) {
+                Text("原图完整保留。原尺寸导出需要更多内存；选择较小尺寸可降低负担，柔肤与锐化细节可能略有差异。",style=MaterialTheme.typography.bodySmall)
             }
             Text("照片不包含原图的位置等元数据。工程包含原图及其元数据，可继续编辑。",style=MaterialTheme.typography.bodySmall)
             OutlinedButton(onClick=onShare,modifier=Modifier.fillMaxWidth()) {Text("分享照片")}
@@ -260,7 +263,7 @@ private fun AboutDialog(onDismiss: () -> Unit) {
     }}
     AlertDialog(onDismissRequest=onDismiss,title={Text(if(licenses) "开源许可" else "关于 NijiFrame")},
         text={Column(Modifier.heightIn(max=400.dp).verticalScroll(rememberScrollState())) {
-            Text(if(licenses) text else "本地照片编辑器 · GPL-3.0-only\n\n照片在本机处理。支持 sRGB JPEG 和 8 位不透明 PNG，当前上限 800 万像素、32 MiB。\n\n工程自动保存在本应用中；卸载前请导出重要工程。Windows 接力与人像特色工具仍在后续规划中。")
+            Text(if(licenses) text else "本地照片编辑器 · GPL-3.0-only\n\n照片在本机处理。支持 sRGB JPEG 和 8 位不透明 PNG，当前上限 1 亿像素、64 MiB，单边不超过 32768 像素。\n\n工程自动保存在本应用中；卸载前请导出重要工程。提供实验柔肤；Windows 接力仍在后续规划中。")
             if(!licenses) TextButton(onClick={licenses=true}) {Text("查看开源许可")}
         }},confirmButton={TextButton(onClick=onDismiss) {Text("关闭")}})
 }
