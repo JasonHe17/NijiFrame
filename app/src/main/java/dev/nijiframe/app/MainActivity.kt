@@ -91,7 +91,7 @@ internal fun NijiFrame(editor: EditorViewModel) {
                     TextButton(onClick={showAbout=true}) { Text("关于") }
                 }
                 Row(Modifier.padding(horizontal=16.dp),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                    Button(onClick={import.launch(arrayOf("image/jpeg","image/png"))},enabled=!ui.busy) { Text("导入照片") }
+                    Button(onClick={import.launch(PhotoInput.mimeTypes)},enabled=!ui.busy) { Text("导入照片") }
                     OutlinedButton(onClick={open.launch(arrayOf("*/*"))},enabled=!ui.busy) { Text("打开工程") }
                 }
                 Text("我的工程",style=MaterialTheme.typography.titleMedium,modifier=Modifier.padding(16.dp))
@@ -101,7 +101,7 @@ internal fun NijiFrame(editor: EditorViewModel) {
                         Text("从一张照片开始",style=MaterialTheme.typography.headlineSmall)
                         Spacer(Modifier.height(12.dp))
                         Text("调整明暗与颜色，重新构图，随时保存并继续编辑。")
-                        Text("支持 JPEG 和不透明 PNG；照片在本机处理。",style=MaterialTheme.typography.bodySmall,
+                        Text("支持 JPEG、PNG、WebP、HEIC/HEIF、AVIF；照片在本机处理。",style=MaterialTheme.typography.bodySmall,
                             modifier=Modifier.padding(top=12.dp))
                     }
                 } else LazyVerticalGrid(columns=GridCells.Adaptive(164.dp),modifier=Modifier.weight(1f),
@@ -144,6 +144,8 @@ internal fun NijiFrame(editor: EditorViewModel) {
                         overflow=TextOverflow.Ellipsis,style=MaterialTheme.typography.labelSmall)
                     Button(onClick={editor.applyTool();showExport=true},enabled=!ui.busy) {Text("导出")}
                 }
+                ui.sourceNotice?.let { Text(it,style=MaterialTheme.typography.labelSmall,
+                    modifier=Modifier.padding(horizontal=16.dp)) }
                 BoxWithConstraints(Modifier.weight(1f)) {
                     if(maxWidth>600.dp) Row(Modifier.fillMaxSize()) {
                         EditorCanvas(ui,editor,Modifier.weight(1f).fillMaxHeight())
@@ -249,7 +251,7 @@ private fun ExportDialog(ui: EditorUi, editor: EditorViewModel, onDismiss: () ->
             if (ImageSizing.previewSample(project.manifest.width, project.manifest.height) > 1) {
                 Text("原图完整保留。原尺寸导出需要更多内存；选择较小尺寸可降低负担，柔肤与锐化细节可能略有差异。",style=MaterialTheme.typography.bodySmall)
             }
-            Text("照片不包含原图的位置等元数据。工程包含原图及其元数据，可继续编辑。",style=MaterialTheme.typography.bodySmall)
+            Text("照片导出为 8 位 sRGB / SDR，不保留 HDR 增益图或位置等原始元数据。工程完整保留原文件，可继续编辑。",style=MaterialTheme.typography.bodySmall)
             OutlinedButton(onClick=onShare,modifier=Modifier.fillMaxWidth()) {Text("分享照片")}
             TextButton(onClick=onSaveProject,modifier=Modifier.fillMaxWidth()) {Text("导出可编辑工程")}
         }
@@ -266,7 +268,7 @@ private fun AboutDialog(onDismiss: () -> Unit) {
     }}
     AlertDialog(onDismissRequest=onDismiss,title={Text(if(licenses) "开源许可" else "关于 NijiFrame")},
         text={Column(Modifier.heightIn(max=400.dp).verticalScroll(rememberScrollState())) {
-            Text(if(licenses) text else "${BuildConfig.VERSION_NAME} · 构建 ${BuildConfig.VERSION_CODE}\n源码 ${BuildConfig.SOURCE_REVISION}\n\n本地照片编辑器 · GPL-3.0-only\n\n照片在本机处理。支持 sRGB JPEG 和 8 位不透明 PNG，当前上限 1 亿像素、64 MiB，单边不超过 32768 像素。\n\n工程自动保存在本应用中；卸载前请导出重要工程。提供实验柔肤；Windows 接力仍在后续规划中。")
+            Text(if(licenses) text else "${BuildConfig.VERSION_NAME} · 构建 ${BuildConfig.VERSION_CODE}\n源码 ${BuildConfig.SOURCE_REVISION}\n\n本地照片编辑器 · GPL-3.0-only\n\n照片在本机处理。支持常见广色域 JPEG、8/16 位 PNG、WebP，以及系统可解码的 HEIC/HEIF、AVIF；按 sRGB／SDR 编辑和导出，保留原文件。暂不支持 RAW、TIFF、透明像素或独立 HLG/PQ HDR，当前上限 1 亿像素、64 MiB，单边不超过 32768 像素。\n\n工程自动保存在本应用中；卸载前请导出重要工程。提供实验柔肤；Windows 接力仍在后续规划中。")
             if(!licenses) TextButton(onClick={licenses=true}) {Text("查看开源许可")}
         }},confirmButton={TextButton(onClick=onDismiss) {Text("关闭")}})
 }

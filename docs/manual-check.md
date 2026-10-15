@@ -19,3 +19,5 @@ For 0.5 large-image checks, start with one ordinary JPEG from your phone. The ed
 In 0.6, open **查看细节**, tap a position in the overview, and compare **查看原图／查看调整**. Close it and confirm a pending tool draft remains pending; cancel the draft and reopen the saved project. For ordinary phone trials, check a few positions rather than repeatedly moving through a maximum-sized input.
 
 - 人像区域：清晰单人照片 → 局部 → 建议区域 → 保留原区域／采用并修正；检查替换提示、撤销／重做、补画／擦除、取消／应用、重开与导出。无脸／多人／遮挡失败时原区域保留。检查眼镜、胡须、头发和脸缘；用原尺寸细节比较最终效果，不把区域出现当作效果合格。普通手机试用只使用小图与短操作；故障、压力和自动化重装仅在专用设备／模拟器执行。
+
+- Format compatibility: try a normal phone JPEG that previously failed the sRGB check, then inspect its source-format/color banner, compare the SDR result, reopen the project and export to a new PNG/JPEG. The original file must remain unchanged. A phone gallery can show HDR highlights or wide-gamut colors that the current SDR export does not retain. See [photo input](photo-input.md) for HEIF/AVIF device and memory limits.

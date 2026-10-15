@@ -4,7 +4,7 @@
 
 | Check | Scope |
 | --- | --- |
-| `:editor-core:test` | v1–v5 resource and parameter round-trip, source hashes, unsupported/corrupt ZIP rejection, history branches, failed-write recovery, geometry bounds/crop handles, no-upscale export dimensions, independent projects, rename/duplicate/delete and migration |
+| `:editor-core:test` | v1–v6 resource and parameter round-trip, source hashes, unsupported/corrupt ZIP rejection, history branches, failed-write recovery, geometry bounds/crop handles, no-upscale export dimensions, independent projects, rename/duplicate/delete and migration |
 | Native CTest | Neutral identity, known linear-light EV, saturation and warmth, clipping/invalid values, constant-image and impulse sharpening, radial vignette symmetry and strip equivalence, ASan/UBSan |
 | `EditorIntegrationTest` | Real Android ContentResolver/decoders/JNI, self-contained reopen after source deletion, all eight EXIF orientations, geometry and PNG dimensions, grayscale JPEG/GPS omission, sharpening strip seams, cancellation, latest-preview ownership, provider failures and automatic-save/new-viewmodel recovery |
 | `EditorUiTest` | Real system picker, pinch/pan/fit, draft cancel/apply, activity recreation, undo/redo, drag crop, flip, system Back with pending edits, landscape and portrait, PNG picker export and decoded pixels/dimensions, sharesheet, project duplicate/delete/rename/reopen |
@@ -41,7 +41,7 @@ Local checks use Linux x86_64 and Android 16/API 36 x86_64. Arm64 APK content is
 
 The 100 MP / 64 MiB / 32,768-pixel-edge limits are current implementation bounds, not a promise of responsive operation on every phone. Native processing is cancellable between strips; platform decoder/provider I/O has platform-dependent cancellation latency. Saving uses synchronized file contents and atomic replacement, not a guarantee against all storage hardware failures. External providers can leave partial destinations on failure.
 
-UI checks cover touch/accessibility labels and reconfiguration, not a complete TalkBack audit or real-user study. Images are SDR/sRGB and opaque; new formats need explicit decoder/color tests. Softening and geometric portrait suggestions remain experimental; feature implementation or a dependency license is not patent clearance.
+UI checks cover touch/accessibility labels and reconfiguration, not a complete TalkBack audit or real-user study. Working pixels and exports are opaque SDR/sRGB; input conversion and codec boundaries are described in photo-input.md. Softening and geometric portrait suggestions remain experimental; feature implementation or a dependency license is not patent clearance.
 
 The positive-face evaluation uses separately retained licensed samples and real UI flows; these portraits are not checked into the repository or shipped. On the local API 36 emulator, six of eight evaluation images produced suggestions, P02/P05 failed explicitly, and a two-face composite was rejected. This is a small regression set, not an accuracy benchmark or aesthetic acceptance. The portable CI test exercises actual no-face inference and synthetic coverage; it does not claim to test the positive portrait set.
 
@@ -50,3 +50,5 @@ Historical foundation verification is preserved in Git history. Current v3 regio
 Large-image tests use generated synthetic inputs, not user photographs. A 100 MP import passing does not establish that a 100 MP full-resolution export fits a phone: original-size export still uses full-image bitmaps, and current memory admission can refuse it. Lower-resolution exports are explicit choices and use the original source, not a display screenshot. See [large-image handling](large-images.md).
 
 `FaceSearchTest` checks odd-sized search-window coverage, source-coordinate remapping, duplicate-location versus separate-location decisions, and subsequent edit geometry. These are synthetic geometry checks, not face-recognition accuracy or a labeled portrait benchmark. Private licensed evaluations remain outside the repository and hosted CI.
+
+`PhotoFormatTest` verifies common wide-gamut and SDR-base HDR input conversion, JPEG/PNG/HEIF/WebP/AVIF orientation and round trips, exact original preservation, detail/export color agreement, large sampled wide JPEG, codec memory refusal, and HDR-transfer/animation refusal. Its fixtures are generated colors; it is not a physical-phone or arbitrary-camera-format certification.

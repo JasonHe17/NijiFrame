@@ -1,12 +1,12 @@
 # High-resolution photos
 
-0.5.0-dev expands input from 8 MP / 32 MiB to **100 MP / 64 MiB**, with a maximum edge of 32,768 pixels. These are independent limits. Supported encodings remain SDR/sRGB JPEG and 8-bit opaque PNG; increasing dimensions does not add RAW, HEIF, HDR or wide-gamut support.
+0.5.0-dev expands input from 8 MP / 32 MiB to **100 MP / 64 MiB**, with a maximum edge of 32,768 pixels. These are independent limits. Current input compatibility, including wide-gamut conversion and HEIF/AVIF restrictions, is described in [photo input](photo-input.md).
 
 ## Editing and saved originals
 
 The unchanged encoded original stays in the project. EXIF-normalized original dimensions define all crop and region coordinates. Opening, saving, exporting a project and reopening it do not replace the original with a thumbnail.
 
-Sources above 8 MP or an 8192-pixel edge use a power-of-two decoder sample with an edge no larger than 2048 pixels. The screen preview is at most 1600 pixels and remains labeled as reduced. Zooming into the main canvas does not reveal original-resolution detail. In 0.6, **查看细节** opens a separate, read-only original-resolution window; see [detail inspection](detail-inspection.md). Smaller sources retain the existing reference-preview path. Sampled PNG inputs with potential alpha are checked in bounded original-resolution regions, so an isolated transparent pixel cannot disappear into the sample and bypass the opaque-input requirement.
+Sources above 8 MP or an 8192-pixel edge use a power-of-two decoder sample with an edge no larger than 2048 pixels. The screen preview is at most 1600 pixels and remains labeled as reduced. Zooming into the main canvas does not reveal original-resolution detail. In 0.6, **查看细节** opens a separate original-resolution window with region correction in the Local tool; see [detail inspection](detail-inspection.md). Smaller sources retain the existing reference-preview path. Sampled PNG inputs with potential alpha are checked in bounded original-resolution regions, so an isolated transparent pixel cannot disappear into the sample and bypass the opaque-input requirement.
 
 ## Photo export
 
@@ -25,3 +25,5 @@ V4 processing parameters are unchanged. Older app versions with smaller resource
 `ImageSizingTest` covers resource boundaries, crop-dependent decode planning and bounded reads. `LargeImageTest` exercises real Android codecs, JNI, project storage and output with synthetic 12 MP, 48 MP and 100 MP images, an encoded photo above 32 MiB, and memory refusal before destination truncation. These are emulator tests, not physical-phone performance measurements. The everyday-phone checks in [manual checks](manual-check.md) remain short normal editing trials.
 
 Platform references: [Android large-bitmap decoding](https://developer.android.com/topic/performance/graphics/load-bitmap), [BitmapFactory.Options](https://developer.android.com/reference/android/graphics/BitmapFactory.Options), and [ActivityManager.MemoryInfo](https://developer.android.com/reference/android/app/ActivityManager.MemoryInfo). No new runtime dependency or model is introduced. Resource limits and preview scheduling are not patent-clearance arguments; relevant implementation comparisons remain necessary when changing the rendering architecture.
+
+HEIF/AVIF require additional whole-frame codec headroom. A small requested ROI or sampled preview does not guarantee low internal codec memory. HEIF can fall back to full-frame decode and crop; AVIF uses the platform crop decoder. The original bounded JPEG/PNG path remains available.
