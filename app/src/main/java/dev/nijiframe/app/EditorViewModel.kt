@@ -93,7 +93,7 @@ class EditorViewModel @JvmOverloads constructor(application: Application,
     }
     private fun fail(error: Exception) { mutable.value=mutable.value.copy(error=message(error),status="操作未完成，已保存的工程仍保留") }
     fun dismissError() { mutable.value=mutable.value.copy(error=null) }
-    fun cancelOperation() { actionJob?.cancel() }
+    fun cancelOperation() { if(mutable.value.canCancel) actionJob?.cancel() }
     private fun action(status: String, block: suspend () -> Unit) {
         if (initialized.isCompleted && mutable.value.busy) return
         closeDetail()
@@ -468,10 +468,13 @@ class EditorViewModel @JvmOverloads constructor(application: Application,
     }
     fun cancelExportSelection() {mutable.value=mutable.value.copy(status="已取消导出")}
     fun consumeExportRequest() {mutable.value=mutable.value.copy(exportRequest=null)}
+    private suspend fun exportPhase(phase: ExportPhase) = withContext(Dispatchers.Main.immediate) {
+        mutable.value=mutable.value.copy(status=phase.label,canCancel=phase.cancellable)
+    }
     fun exportProject(uri: Uri) = action("正在导出工程") {
         saveCurrentIfNeeded()
         val project=requireNotNull(mutable.value.project)
-        withContext(Dispatchers.IO) { repository.exportProject(project,uri) }
+        withContext(Dispatchers.IO) { repository.exportProject(project,uri,::exportPhase) }
         mutable.value=mutable.value.copy(status="可编辑工程已导出")
     }
     fun exportPhoto(uri: Uri, format: PhotoFormat? = null) = action("正在导出照片") {
@@ -479,14 +482,14 @@ class EditorViewModel @JvmOverloads constructor(application: Application,
         val state=mutable.value
         withContext(Dispatchers.Default) { pixelWork.withLock {
             repository.exportPhoto(requireNotNull(state.project),requireNotNull(source),uri,
-                state.exportSettings.copy(format=format ?: state.exportSettings.format))
+                state.exportSettings.copy(format=format ?: state.exportSettings.format),::exportPhase)
         }}
         mutable.value=mutable.value.copy(status="照片已导出，未复制原图元数据")
     }
     fun sharePhoto() = action("正在准备分享") {
         saveCurrentIfNeeded();renderJob?.cancelAndJoin();val state=mutable.value
         val uri=withContext(Dispatchers.Default) { pixelWork.withLock {
-            repository.sharePhoto(requireNotNull(state.project),requireNotNull(source),state.exportSettings)
+            repository.sharePhoto(requireNotNull(state.project),requireNotNull(source),state.exportSettings,::exportPhase)
         }}
         mutable.value=mutable.value.copy(sharedPhoto=SharedPhoto(uri,state.exportSettings.format.mime),status="照片已准备好")
     }

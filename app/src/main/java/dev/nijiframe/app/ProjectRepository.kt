@@ -20,8 +20,10 @@ class ProjectRepository(private val context: Context,
     private val resolver = context.contentResolver
     val library = ProjectLibrary(directory, ::requireProjectMemory)
     private val importCache = File(context.cacheDir, "project-imports")
+    private val exportCache = File(context.cacheDir, "export-staging")
     private val photoCache = File(context.cacheDir, "photo-imports")
     fun prepare() {
+        StagedExport.prune(exportCache)
         // A killed process can leave a staged import. Do not touch recent files or saved projects.
         for (cache in listOf(importCache, photoCache)) {
             cache.listFiles()?.filter { it.name.startsWith("project-import-") && it.extension == "tmp" &&
@@ -91,8 +93,10 @@ class ProjectRepository(private val context: Context,
             catch (error: Exception) { atomic.failWrite(stream);throw error }
         } finally { if (small !== bitmap) small.recycle() }
     }
-    fun exportProject(project: Project, uri: Uri) {
-        requireNotNull(resolver.openOutputStream(uri, "wt")) { "无法写入工程" }.use { ProjectIO.write(project, it) }
+    suspend fun exportProject(project: Project, uri: Uri, onPhase: suspend (ExportPhase) -> Unit = {}) {
+        onPhase(ExportPhase.PACKAGING)
+        StagedExport.write(exportCache, {onPhase(ExportPhase.WRITING)},
+            {requireNotNull(resolver.openOutputStream(uri,"wt")) {"无法写入工程"}}) { ProjectIO.write(project,it) }
     }
     fun checkPhotoExport(project: Project, source: Bitmap, settings: ExportSettings) {
         val m = project.manifest
@@ -107,39 +111,49 @@ class ProjectRepository(private val context: Context,
         }
         ImageMemory.requireExport(required, availableMemory())
     }
-    suspend fun exportPhoto(project: Project, source: Bitmap, uri: Uri, settings: ExportSettings = ExportSettings()) {
+    suspend fun exportPhoto(project: Project, source: Bitmap, uri: Uri, settings: ExportSettings = ExportSettings(),
+                            onPhase: suspend (ExportPhase) -> Unit = {}) {
         // Reject before creating/truncating the destination; never silently change the chosen dimensions.
+        onPhase(ExportPhase.RENDERING)
         checkPhotoExport(project, source, settings)
         val m = project.manifest
         val sample = ImageSizing.exportSample(m, settings)
         val context = currentCoroutineContext()
         context.ensureActive()
         val reusable = source.width == m.width && source.height == m.height && sample == 1
-        val input = if (reusable) source else ImagePipeline.decode(project.original, sample, info=ImagePipeline.inspect(project.original,m.honorExifColorSpace), check = { context.ensureActive() })
-        try {
-            val edit = ImagePipeline.scaledEdit(m.edit, m.width, m.height, input.width, input.height)
-            var rendered = ImagePipeline.render(input, edit)
+        StagedExport.write(exportCache, {onPhase(ExportPhase.WRITING)},
+            {requireNotNull(resolver.openOutputStream(uri,"wt")) {"无法写入照片"}}) { output ->
+            val input = if (reusable) source else ImagePipeline.decode(project.original, sample,
+                info=ImagePipeline.inspect(project.original,m.honorExifColorSpace), check={context.ensureActive()})
             try {
-                val (w, h) = Geometry.outputSize(m.width, m.height, m.edit)
-                val (width, height) = settings.dimensions(w, h)
-                if (width != rendered.width || height != rendered.height) {
-                    val reduced = Bitmap.createScaledBitmap(rendered, width, height, true)
-                    rendered.recycle(); rendered = reduced
-                }
-                context.ensureActive()
-                val format = if (settings.format == PhotoFormat.JPEG) Bitmap.CompressFormat.JPEG else Bitmap.CompressFormat.PNG
-                requireNotNull(resolver.openOutputStream(uri, "wt")) { "无法写入照片" }.use {
-                    check(rendered.compress(format, settings.quality, it)) { "照片编码失败" }
-                }
-            } finally { rendered.recycle() }
-        } finally { if (!reusable) input.recycle() }
+                val edit = ImagePipeline.scaledEdit(m.edit, m.width, m.height, input.width, input.height)
+                var rendered = ImagePipeline.render(input, edit)
+                try {
+                    val (w, h) = Geometry.outputSize(m.width, m.height, m.edit)
+                    val (width, height) = settings.dimensions(w, h)
+                    if (width != rendered.width || height != rendered.height) {
+                        val reduced = Bitmap.createScaledBitmap(rendered, width, height, true)
+                        rendered.recycle(); rendered = reduced
+                    }
+                    context.ensureActive()
+                    val format = if (settings.format == PhotoFormat.JPEG) Bitmap.CompressFormat.JPEG else Bitmap.CompressFormat.PNG
+                    onPhase(ExportPhase.ENCODING)
+                    val encoded=rendered.compress(format,settings.quality,output)
+                    context.ensureActive()
+                    check(encoded) {"照片编码失败"}
+                } finally { rendered.recycle() }
+            } finally { if (!reusable) input.recycle() }
+            // All export-only bitmaps are released before copying the prepared file to its provider.
+        }
     }
-    suspend fun sharePhoto(project: Project, source: Bitmap, settings: ExportSettings): Uri {
+
+    suspend fun sharePhoto(project: Project, source: Bitmap, settings: ExportSettings,
+                           onPhase: suspend (ExportPhase) -> Unit = {}): Uri {
         val folder=File(context.cacheDir,"shared-photos").apply { mkdirs() }
         // Existing recipients can keep reading a previous share while a new photo is prepared.
         folder.listFiles()?.filter { System.currentTimeMillis()-it.lastModified()>86_400_000 }?.forEach { it.delete() }
         val path=File(folder,"NijiFrame-${UUID.randomUUID()}.${settings.format.extension}")
-        try { exportPhoto(project,source,Uri.fromFile(path),settings) }
+        try { exportPhoto(project,source,Uri.fromFile(path),settings,onPhase) }
         catch (error: Throwable) { path.delete();throw error }
         return FileProvider.getUriForFile(context,"${context.packageName}.files",path)
     }

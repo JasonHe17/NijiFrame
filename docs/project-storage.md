@@ -16,3 +16,7 @@ Validation still checks both directory and local entries, exact resource lengths
 - Original bytes still reside in a `ByteArray` throughout editing. Initial photo import also stages its provider stream with a 64 KiB buffer and reads one final original array into the project. It requires temporary private disk space up to the 64 MiB source limit. The in-memory `create(ByteArray, ...)` convenience factory still copies caller-owned bytes; Android uses the staged stream factory. Source-file streaming, >64 MiB inputs, and tiled full-resolution photo export remain future work.
 
 The implementation uses standard [RandomAccessFile](https://developer.android.com/reference/java/io/RandomAccessFile) and [ZipInputStream](https://developer.android.com/reference/java/util/zip/ZipInputStream) APIs and introduces no dependency, codec, model or new processing algorithm. This is an I/O change to the existing self-contained project contract. It does not add network-address effect delivery or change the existing patent-review boundaries.
+
+## External export
+
+External project export also prepares a complete ZIP in private cache before opening the selected destination. Validation, packaging failure and preparation cancellation preserve an existing destination. The subsequent provider copy is a separate, non-cancellable write phase and does not promise atomic replacement. [Export behavior](export-behavior.md) describes the disk-space, cancellation and provider-failure boundaries. Internal library saves continue to use their existing atomic replacement path.
