@@ -112,10 +112,10 @@ jobs:
           adb shell stop
           adb shell start
           for attempt in {1..60}; do
-            if adb shell service check package 2>/dev/null | rg -q ': found'; then break; fi
+            if [[ "$(adb shell service check package 2>/dev/null)" == *": found"* ]]; then break; fi
             sleep 1
           done
-          adb shell service check package | rg -q ': found'
+          [[ "$(adb shell service check package)" == *": found"* ]]
           test "$(adb shell getprop dalvik.vm.heapgrowthlimit | tr -d '\r')" = 512m
           adb shell input keyevent 82
           adb shell settings put global window_animation_scale 0
