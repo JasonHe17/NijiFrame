@@ -20,7 +20,17 @@ class ProjectTest {
             }
         }
     }.toByteArray()
-    private fun rejects(bytes: ByteArray) { assertThrows(Exception::class.java) { ProjectIO.read(bytes.inputStream()) } }
+    private fun rejects(bytes: ByteArray) {
+        assertThrows(Exception::class.java) { ProjectIO.read(bytes.inputStream()) }
+        val directory = Files.createTempDirectory("nijiframe-reject").toFile()
+        try {
+            val file = File(directory, "bad.nijiproj").apply { writeBytes(bytes) }
+            assertThrows(Exception::class.java) { ProjectIO.read(file) }
+            val staging = File(directory, "staging")
+            assertThrows(Exception::class.java) { ProjectIO.read(bytes.inputStream(), staging) }
+            assertTrue(staging.listFiles()!!.isEmpty())
+        } finally { directory.deleteRecursively() }
+    }
 
     @Test fun roundTripRetainsOriginalAndEditableState() {
         val original = project()

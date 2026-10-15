@@ -4,9 +4,9 @@ Status: implemented experimental processing contract, not a stable cross-platfor
 
 ## Container and validation
 
-ZIP contains `project.json` (UTF-8 JSON, at most 16 KiB) and `assets/original` (unchanged encoded image, at most 64 MiB). An optional `assets/local-mask.json` contains the versioned region (at most 512 KiB). Complete archive limit: 65.5 MiB. Reading validates the central directory and paths, regular-file modes, payload CRCs, length, SHA-256, operation version and numerical bounds. Duplicate/unexpected paths, comments, ZIP64, encryption, missing resources and incomplete archives fail. No archive paths are extracted to the filesystem.
+ZIP contains `project.json` (UTF-8 JSON, at most 16 KiB) and `assets/original` (unchanged encoded image, at most 64 MiB). An optional `assets/local-mask.json` contains the versioned region (at most 512 KiB). Complete archive limit: 65.5 MiB. Reading validates the central directory and paths, regular-file modes, payload CRCs, length, SHA-256, operation version and numerical bounds. Duplicate/unexpected paths, comments, ZIP64, encryption, missing resources and incomplete archives fail. No archive paths are extracted to the filesystem. Local editing and provider imports use the [bounded file reader](project-storage.md); v6 payloads and rendering semantics are unchanged.
 
-The manifest contains `version: 6`, `pipeline: "srgb-import-v6"`, `source: "assets/original"`, `sourceBytes`, lowercase `sourceSha256`, source-oriented `width` / `height`, a project `name` (1–80 characters, no control characters), `edit`, and `honorExifColorSpace` (boolean). Unknown fields and unsupported operations are rejected. Original source dimensions are at most 100,000,000 pixels and 32,768 pixels per edge after EXIF normalization; original metadata must match even when decoding a preview sample. Platform URIs and filesystem paths are never portable identifiers.
+The manifest contains `version: 6`, `pipeline: "srgb-import-v6"`, `source: "assets/original"`, `sourceBytes`, lowercase `sourceSha256`, source-oriented `width` / `height`, a project `name` (1–80 characters, no control characters), `edit`, and `honorExifColorSpace` (boolean). Unknown fields and unsupported operations are rejected. Original source dimensions are at most 210,000,000 pixels and 32,768 pixels per edge after EXIF normalization; original metadata must match even when decoding a preview sample. Platform URIs and filesystem paths are never portable identifiers.
 
 ## Edit parameters and order
 
@@ -25,7 +25,7 @@ The manifest contains `version: 6`, `pipeline: "srgb-import-v6"`, `source: "asse
 | sharpen | 0 / [0,2] | Unsharp amount using a 3×3 Gaussian stencil in encoded RGB |
 | vignette | 0 / [-1,1] | Radial exposure falloff; positive darkens corners |
 
-1. Decode supported opaque sources, convert recognized RGB profiles into 8-bit sRGB, use the SDR base of compatible Ultra HDR JPEG, normalize orientation once and retain original encoded bytes. HEIF uses the platform codec plus EXIF; AVIF uses ImageDecoder container orientation. See [photo input](photo-input.md) for exact color/codec rules and memory limits.
+1. Decode supported opaque sources, convert recognized RGB profiles into 8-bit sRGB, use the SDR base of compatible Ultra HDR JPEG, normalize orientation once and retain original encoded bytes. HEIF uses the platform codec plus EXIF; AVIF uses the primary-item container transforms with BitmapFactory pixels. See [photo input](photo-input.md) for exact color/codec rules and memory limits.
 2. Apply the optional source-coordinate softening candidate below, then decode each sRGB channel to linear light with the standard 0.04045/12.92, 0.055/1.055, 2.4 transfer function, then apply exposure.
 3. Let `Y = clamp(0.2126 R + 0.7152 G + 0.0722 B, 0, 1)`, `S=(1-Y)^2`, `H=Y^2`. The additive lift is `0.25*(shadows*S + highlights*H + whites*H^2) + 0.15*blacks*S^2`. Apply lift and contrast about 0.18, flooring negative values at zero.
 4. Multiply R/G/B respectively by `2^(0.4*warmth)`, `2^(-0.3*tint)`, `2^(-0.4*warmth)`. With `chroma=(max-min)/max` (zero at black), effective saturation is `saturation*(1+vibrance*(1-chroma))`. Mix each channel around its linear luminance, clip [0,1], apply inverse sRGB transfer, and round to nearest 8-bit value. If all new tone parameters are zero, use the exact v1 tone path; neutral tone is decoded-pixel identity.
@@ -70,7 +70,7 @@ System document providers do not guarantee atomic replacement. Keep a valid priv
 
 ## Expanded resource limits in 0.5
 
-The v4 operation schema and full-resolution pixel contract are unchanged. Resource bounds are now 100,000,000 pixels, 32,768 pixels per edge and 64 MiB for the encoded source; older v4 readers may reject larger resources. The UI uses original-resolution dimensions even when the decoder returns a sampled bitmap. Memory admission may refuse an operation below these format limits; refusal must preserve the saved project and must not silently reduce the selected export size. See [large-image handling](large-images.md).
+The v4 operation schema and full-resolution pixel contract are unchanged. Resource bounds are now 210,000,000 pixels, 32,768 pixels per edge and 64 MiB for the encoded source; older v4 readers may reject larger resources. The UI uses original-resolution dimensions even when the decoder returns a sampled bitmap. Memory admission may refuse an operation below these format limits; refusal must preserve the saved project and must not silently reduce the selected export size. See [large-image handling](large-images.md).
 
 ## Detail inspection in 0.6
 

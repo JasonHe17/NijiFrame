@@ -28,7 +28,7 @@ Sources up to 8 MP (and 8192 pixels per edge) retain the reference-preview path.
 
 ## Persistence and product behavior
 
-Save projects separately from rendered photo exports. Save status means the durable state is committed; failed writes must preserve the previous valid project. A project carries its resources so moving or losing the original external file does not silently invalidate the saved work. Large-resource storage and deduplication can evolve behind this contract.
+Save projects separately from rendered photo exports. Save status means the durable state is committed; failed writes must preserve the previous valid project. A project carries its resources so moving or losing the original external file does not silently invalidate the saved work. Local project reads validate the ZIP directory through one seekable file handle and fill bounded final resource arrays. Non-seekable provider imports first stage the archive in private cache with a fixed buffer; see [project storage](project-storage.md). Original image bytes still reside in memory during editing. File-backed source ownership and deduplication can evolve behind this contract.
 
 Local editing does not require an account. Downloaded models need a version, digest, source, license, progress and retry behavior. A missing model must not prevent basic editing. Export should make resolution, format and metadata policy explicit. Precise location metadata should be omitted by default, with original metadata retained inside the private project where applicable.
 
