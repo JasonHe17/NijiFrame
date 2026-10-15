@@ -104,6 +104,13 @@ class DetailRegionTest {
             return node.takeIf {it.isEnabled}
         }
         fun tap(label: String) {await {actionable(label)!=null};requireNotNull(actionable(label)).click();device.waitForIdle()}
+        fun selectMode(label: String, mode: RegionMode) {
+            tap(label)
+            // Input injection/idle can return before the click's state reaches Compose.
+            // A mode change during the next gesture restarts its pointer handler.
+            await {model.ui.value.regionMode==mode && actionable(label)?.isChecked==true}
+            instrumentation.waitForIdleSync();device.waitForIdle()
+        }
         fun ready(count: Int) {
             fun frameReady(): Boolean = model.ui.value.let { ui ->
                 ui.detail?.loading==false && ui.detail.bitmap!=null &&
@@ -160,7 +167,7 @@ class DetailRegionTest {
         }
         try {
             await {desc("编辑预览").exists()};tap("局部");tap("查看细节");ready(0)
-            tap("细节擦除")
+            selectMode("细节擦除",RegionMode.ERASE)
             var canvas=desc("细节区域画布").visibleBounds
             // The small native frame is centered, with blank space around it.
             device.click(canvas.left+2,canvas.centerY());device.waitForIdle();ready(0)
@@ -174,11 +181,11 @@ class DetailRegionTest {
             tap("查看调整");ready(1)
             tap("关闭细节");tap("取消调整")
             assertEquals(initial,library.read(id).manifest.edit)
-            tap("局部");tap("查看细节");ready(0);tap("细节擦除")
+            tap("局部");tap("查看细节");ready(0);selectMode("细节擦除",RegionMode.ERASE)
             canvas=desc("细节区域画布").visibleBounds
             val frameBounds=nativeFrame(canvas)
             clickFrame(frameBounds.left+210,frameBounds.top+240);device.waitForIdle();ready(1)
-            record("before add mode");tap("细节添加");record("after add mode")
+            record("before add mode");selectMode("细节添加",RegionMode.ADD);record("after add mode")
             clickFrame(frameBounds.left+110,frameBounds.top+320);device.waitForIdle();ready(2)
             scenario.recreate();ready(2)
             device.setOrientationLeft()
