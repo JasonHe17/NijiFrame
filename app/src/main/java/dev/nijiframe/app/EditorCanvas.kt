@@ -75,7 +75,7 @@ internal fun EditorCanvas(ui: EditorUi, editor: EditorViewModel, modifier: Modif
         }
         if(ui.rendering) LinearProgressIndicator(Modifier.fillMaxWidth().align(Alignment.TopCenter))
         if(ui.approximatePreview) Surface(Modifier.align(Alignment.TopEnd).padding(8.dp),shape=MaterialTheme.shapes.small) {
-            Text("快速预览 · 正在精算",Modifier.padding(8.dp),style=MaterialTheme.typography.labelSmall)
+            Text(if(ui.rendering) "快速预览 · 正在精算" else "缩略预览 · 以导出效果为准",Modifier.padding(8.dp),style=MaterialTheme.typography.labelSmall)
         }
         if(ui.comparing) Surface(Modifier.align(Alignment.TopStart).padding(12.dp),shape=MaterialTheme.shapes.small) {
             Text("原图",Modifier.padding(8.dp),style=MaterialTheme.typography.labelMedium)

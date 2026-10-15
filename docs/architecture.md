@@ -24,7 +24,7 @@ Rendering, image decoding, masks and previews have a shared memory budget. Initi
 
 The first color scope is SDR/sRGB. Normalize EXIF orientation once for the editing coordinate system and keep original bytes separately. Convert supported source profiles deliberately; reject unsupported formats or color representations with an actionable explanation. Experimental tone operations use linear sRGB; individual operations must state their own working space and version.
 
-A full-resolution render reduced to display size is the reference preview. Large images also produce a labeled 800-pixel interactive approximation before settling to the reference; export always uses the authoritative processing definition. Effect radii must have explicit units independent from display scale.
+Sources up to 8 MP (and 8192 pixels per edge) retain the reference-preview path. Larger originals use a bounded decoded proxy; editor coordinates, masks and saved originals remain at source resolution. The UI labels this settled preview as approximate. Original-size export re-decodes the original after memory admission; explicitly reduced large-image exports choose a decode sample for the requested crop and output size. They never upscale the screen preview. The full-resolution processing definition is unchanged; lower-resolution detail filters can differ. See [large-image handling](large-images.md).
 
 ## Persistence and product behavior
 

@@ -13,7 +13,7 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
 object ProjectIO {
-    const val MAX_SOURCE_BYTES = 32 * 1024 * 1024
+    const val MAX_SOURCE_BYTES = 64 * 1024 * 1024
     const val MAX_MASK_BYTES = 512 * 1024
     private val allowed = setOf("project.json", "assets/original", "assets/local-mask.json")
     private const val MAX_MANIFEST_BYTES = 16 * 1024
@@ -26,15 +26,30 @@ object ProjectIO {
             width = width, height = height).also { it.validate() }, original.copyOf())
 
     fun readBounded(input: InputStream, limit: Int): ByteArray {
-        val out = ByteArrayOutputStream(minOf(limit, 8192))
-        val buffer = ByteArray(8192)
-        while (true) {
-            val count = input.read(buffer)
-            if (count < 0) break
-            require(out.size().toLong() + count <= limit) { "Resource exceeds size limit" }
-            out.write(buffer, 0, count)
+        require(limit >= 0)
+        // Fixed chunks avoid ByteArrayOutputStream's doubling buffer plus final-copy peak on large originals.
+        val chunks = ArrayList<ByteArray>()
+        var total = 0
+        var finished = false
+        while (!finished) {
+            val chunk = ByteArray(minOf(64 * 1024L, limit.toLong() - total + 1).toInt())
+            var used = 0
+            while (used < chunk.size) {
+                val count = input.read(chunk, used, chunk.size - used)
+                if (count < 0) { finished = true; break }
+                if (count == 0) {
+                    val byte = input.read()
+                    if (byte < 0) { finished = true; break }
+                    chunk[used++] = byte.toByte()
+                } else used += count
+                require(total.toLong() + used <= limit) { "Resource exceeds size limit" }
+            }
+            if (used > 0) { chunks.add(if (used == chunk.size) chunk else chunk.copyOf(used)); total += used }
         }
-        return out.toByteArray()
+        val result = ByteArray(total)
+        var offset = 0
+        for (chunk in chunks) { chunk.copyInto(result, offset); offset += chunk.size }
+        return result
     }
 
     /** Catalog metadata only; opening for editing still validates the entire resource package. */
