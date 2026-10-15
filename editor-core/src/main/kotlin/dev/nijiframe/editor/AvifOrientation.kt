@@ -15,6 +15,7 @@ object AvifOrientation {
         fun boxes(start: Int,end: Int): List<Box> {
             val result=mutableListOf<Box>();var at=start
             while(at<end) {
+                require(result.size<4096) {"AVIF metadata has too many boxes"}
                 var length=number(at,4,end);var header=8
                 require(at.toLong()+8<=end) {"Truncated AVIF box"}
                 if(length==1L) {
@@ -44,7 +45,7 @@ object AvifOrientation {
             require(v in 0..1) {"Unsupported AVIF association version"}
             val flags=number(ipma.data+1,3,ipma.end)
             val count=number(ipma.data+4,4,ipma.end)
-            require(count<=(ipma.end-ipma.data)/3) {"Invalid AVIF association count"}
+            require(count<=65536 && count<=(ipma.end-ipma.data)/3) {"Invalid AVIF association count"}
             var at=ipma.data+8
             repeat(count.toInt()) {
                 val idSize=if(v==0L) 2 else 4
@@ -54,7 +55,10 @@ object AvifOrientation {
                     val size=if(flags and 1L==0L) 1 else 2
                     val index=(number(at,size,ipma.end) and if(size==1) 127L else 32767L).toInt();at+=size
                     require(index<=properties.size) {"Invalid AVIF property index"}
-                    if(id==primary && index>0) selected+=properties[index-1]
+                    if(id==primary && index>0) {
+                        require(selected.size<256) {"AVIF primary item has too many properties"}
+                        selected+=properties[index-1]
+                    }
                 }
             }
         }
@@ -72,7 +76,7 @@ object AvifOrientation {
             "imir" -> when(number(p.data,1,p.end).toInt()) {
                 0 -> apply(1,0,0,-1) // exchange top/bottom
                 1 -> apply(-1,0,0,1) // exchange left/right
-                else -> error("Invalid AVIF mirror axis")
+                else -> throw IllegalArgumentException("Invalid AVIF mirror axis")
             }
         }
         val orientations=listOf(intArrayOf(1,0,0,1),intArrayOf(-1,0,0,1),intArrayOf(-1,0,0,-1),

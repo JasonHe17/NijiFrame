@@ -108,14 +108,23 @@ jobs:
           # system images. Separate tests inject low budgets and assert safe refusal.
           adb root
           adb wait-for-device
-          adb shell setprop dalvik.vm.heapgrowthlimit 512m
-          adb shell stop
-          adb shell start
+          # Stop only the primary zygote: some images have no zygote_secondary.
+          # Wait for the old runtime to exit before starting a new system server.
+          adb shell stop zygote
           for attempt in {1..60}; do
-            if [[ "$(adb shell service check package 2>/dev/null)" == *": found"* ]]; then break; fi
+            if [ "$(adb shell getprop init.svc.zygote | tr -d '\r')" = stopped ]; then break; fi
             sleep 1
           done
-          [[ "$(adb shell service check package)" == *": found"* ]]
+          test "$(adb shell getprop init.svc.zygote | tr -d '\r')" = stopped
+          adb shell setprop dalvik.vm.heapsize 512m
+          adb shell setprop dalvik.vm.heapgrowthlimit 512m
+          adb shell setprop sys.boot_completed 0
+          adb shell start zygote
+          for attempt in {1..90}; do
+            if [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = 1 ]; then break; fi
+            sleep 2
+          done
+          test "$(adb shell getprop sys.boot_completed | tr -d '\r')" = 1
           test "$(adb shell getprop dalvik.vm.heapgrowthlimit | tr -d '\r')" = 512m
           adb shell input keyevent 82
           adb shell settings put global window_animation_scale 0
