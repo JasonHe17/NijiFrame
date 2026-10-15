@@ -94,7 +94,7 @@ jobs:
           # Google APIs images need more userdata space than the AVD CLI default.
           sed -i '/^disk.dataPartition.size=/d' "$ANDROID_AVD_HOME/ci.avd/config.ini"
           echo 'disk.dataPartition.size=6G' >> "$ANDROID_AVD_HOME/ci.avd/config.ini"
-          "$ANDROID_HOME/emulator/emulator" -avd ci -port 5554 -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect > emulator.log 2>&1 &
+          "$ANDROID_HOME/emulator/emulator" -avd ci -port 5554 -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader > emulator.log 2>&1 &
           niji_emulator_pid=$!
           trap 'adb emu kill || true; kill "$niji_emulator_pid" 2>/dev/null || true' EXIT
           for attempt in {1..90}; do
