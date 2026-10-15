@@ -1,0 +1,71 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Pinned model weights are fetched at build time, never by the installed app.
+def modelSpec = new Properties()
+rootProject.file('models/face-landmarker.properties').withInputStream { modelSpec.load(it) }
+def modelAsset = layout.buildDirectory.file('generated/modelAssets/face_landmarker.task')
+def prepareModel = tasks.register('preparePortraitModel') {
+    inputs.file(rootProject.file('models/face-landmarker.properties'))
+    outputs.file(modelAsset)
+    def verify = { File file ->
+        file.isFile() && file.length() == modelSpec.bytes.toLong() &&
+            java.security.MessageDigest.getInstance('SHA-256').digest(file.bytes).encodeHex().toString() == modelSpec.sha256
+    }
+    outputs.upToDateWhen { verify(modelAsset.get().asFile) }
+    doLast {
+        def output = modelAsset.get().asFile
+        output.parentFile.mkdirs()
+        def supplied = providers.gradleProperty('portraitModel').orNull
+        def temporary = new File(output.parentFile, 'face_landmarker.task.download')
+        try {
+            if (supplied != null) {
+                temporary.bytes = file(supplied).bytes
+            } else {
+                def connection = new URI(modelSpec.url).toURL().openConnection()
+                connection.connectTimeout = 30000
+                connection.readTimeout = 30000
+                connection.getInputStream().withCloseable { input ->
+                    temporary.withOutputStream { stream ->
+                        byte[] buffer = new byte[65536]
+                        long total = 0
+                        int count
+                        while ((count = input.read(buffer)) != -1) {
+                            total += count
+                            if (total > modelSpec.bytes.toLong()) throw new GradleException('Model exceeds pinned size')
+                            stream.write(buffer, 0, count)
+                        }
+                    }
+                }
+            }
+            if (!verify(temporary)) throw new GradleException('Portrait model checksum or size mismatch')
+            java.nio.file.Files.move(temporary.toPath(), output.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+        } finally { temporary.delete() }
+    }
+}
+android.sourceSets.main.assets.srcDir(layout.buildDirectory.dir('generated/modelAssets'))
+android.androidResources.noCompress += 'task'
+tasks.named('preBuild').configure { dependsOn prepareModel }
+
+// Top-level AAR META-INF files are not automatically packaged as app Java resources.
+def noticeAars = configurations.detachedConfiguration(
+    dependencies.create('com.google.mediapipe:tasks-core:1.1.0@aar'),
+    dependencies.create('com.google.mediapipe:tasks-vision:1.1.0@aar'))
+noticeAars.transitive = false
+def modelNotices = tasks.register('prepareMediaPipeNotices') {
+    inputs.files(noticeAars)
+    outputs.dir(layout.buildDirectory.dir('generated/mediaPipeNotices'))
+    doLast {
+        def output = layout.buildDirectory.dir('generated/mediaPipeNotices/open-source').get().asFile
+        output.mkdirs()
+        noticeAars.files.each { aar ->
+            new java.util.zip.ZipFile(aar).withCloseable { zip ->
+                def entry = zip.getEntry('META-INF/NOTICE')
+                if (entry == null) throw new GradleException("Missing upstream notice in ${aar.name}")
+                zip.getInputStream(entry).withCloseable { stream ->
+                    new File(output, "MediaPipe-${aar.name.replace('.aar', '')}-NOTICE.txt").bytes = stream.bytes
+                }
+            }
+        }
+    }
+}
+android.sourceSets.main.assets.srcDir(layout.buildDirectory.dir('generated/mediaPipeNotices'))
+tasks.named('preBuild').configure { dependsOn modelNotices }

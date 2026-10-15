@@ -17,3 +17,5 @@ Download/build instructions are in the [README](../README.md); details and draft
 For 0.5 large-image checks, start with one ordinary JPEG from your phone. The editor should retain the original dimensions and identify a reduced preview. Try a 1280-edge export first, then a larger size if desired. Original-size output can be refused when memory is insufficient; do not stress a daily-use phone by repeatedly retrying the same refusal. Keep high-volume, maximum-size and low-memory automation on a dedicated emulator. See [high-resolution photos](large-images.md).
 
 In 0.6, open **查看细节**, tap a position in the overview, and compare **查看原图／查看调整**. Close it and confirm a pending tool draft remains pending; cancel the draft and reopen the saved project. For ordinary phone trials, check a few positions rather than repeatedly moving through a maximum-sized input.
+
+- 人像区域：清晰单人照片 → 局部 → 建议区域 → 保留原区域／采用并修正；检查替换提示、撤销／重做、补画／擦除、取消／应用、重开与导出。无脸／多人／遮挡失败时原区域保留。检查眼镜、胡须、头发和脸缘；用原尺寸细节比较最终效果，不把区域出现当作效果合格。普通手机试用只使用小图与短操作；故障、压力和自动化重装仅在专用设备／模拟器执行。

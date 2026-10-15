@@ -122,10 +122,11 @@ private fun LocalPanel(ui: EditorUi, editor: EditorViewModel, draft: Edit) {
         RegionMode.entries.forEach { mode -> FilterChip(selected=ui.regionMode==mode,
             onClick={editor.regionMode(mode)},label={Text(mode.label)}) }
     }
+    TextButton(onClick=editor::suggestRegion,enabled=!ui.busy && !ui.rendering) {Text("建议人像区域（实验）")}
     Row(verticalAlignment=Alignment.CenterVertically) {
         Checkbox(checked=ui.showRegion,onCheckedChange=editor::showRegion,modifier=Modifier.semantics {contentDescription="显示区域"})
-        Text("显示区域 · ${draft.local.region.strokes.size} 笔",style=MaterialTheme.typography.bodySmall)
-        TextButton(onClick=editor::clearRegion,enabled=draft.local.region.strokes.isNotEmpty()) {Text("清空区域")}
+        Text("显示区域 · ${draft.local.region.strokes.size} 笔" + if(draft.local.region.base!=null) " · 含建议" else "",style=MaterialTheme.typography.bodySmall)
+        TextButton(onClick=editor::clearRegion,enabled=!draft.local.region.isEmpty) {Text("清空区域")}
     }
     Row(Modifier.horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(6.dp)) {
         listOf("局部曝光","柔肤（实验）","细节保护","笔刷大小","边缘硬度").forEach { item ->
@@ -135,7 +136,7 @@ private fun LocalPanel(ui: EditorUi, editor: EditorViewModel, draft: Edit) {
     when(setting) {
         "柔肤（实验）" -> {
             Text(String.format(Locale.ROOT,"柔肤强度 %.0f%% · %s",draft.local.soften*100,
-                if(draft.local.region.strokes.isEmpty()) "请先涂选区域" else "实验效果，留意纹理"),style=MaterialTheme.typography.labelMedium)
+                if(draft.local.region.isEmpty) "请先涂选区域" else "实验效果，留意纹理"),style=MaterialTheme.typography.labelMedium)
             Slider(value=draft.local.soften,onValueChange={editor.updateDraft(draft.copy(local=draft.local.copy(soften=it)))},
                 onValueChangeFinished=editor::localCheckpoint,valueRange=0f..1f,
                 modifier=Modifier.semantics {contentDescription="柔肤强度调整"})

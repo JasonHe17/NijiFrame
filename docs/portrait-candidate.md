@@ -17,3 +17,5 @@ Research comparisons use separately licensed images outside this repository. Aut
 `SofteningProjectTest`, `SofteningTest` and native invariants check compatibility, neutral/masked identity, strip equivalence, persistence and output pixels; the local real-UI flow also exercises the softening control. These checks establish engineering behavior, not aesthetic acceptance. Related patent claims require separate implementation review; an independent implementation does not establish clearance.
 
 A daily-use phone should be used only for short ordinary editing trials with copied inputs. Run malformed-input, stress and automated reinstall tests on dedicated environments. See [manual checks](manual-check.md).
+
+The optional [portrait region suggestion](portrait-regions.md) now provides a geometric starting selection. This does not change the experimental softening algorithm or constitute aesthetic acceptance. Its model, limitations and independent schema v5 are documented separately.

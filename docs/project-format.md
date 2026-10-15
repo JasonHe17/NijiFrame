@@ -1,12 +1,12 @@
-# Editable project format v4
+# Editable project format v5
 
 Status: implemented experimental processing contract, not a stable cross-platform guarantee. File extension `.nijiproj`; Android document export uses `application/octet-stream` to preserve this extension.
 
 ## Container and validation
 
-ZIP contains `project.json` (UTF-8 JSON, at most 16 KiB) and `assets/original` (unchanged encoded image, at most 64 MiB). An optional `assets/local-mask.json` contains the v3 region (at most 512 KiB). Complete archive limit: 65.5 MiB. Reading validates the central directory and paths, regular-file modes, payload CRCs, length, SHA-256, operation version and numerical bounds. Duplicate/unexpected paths, comments, ZIP64, encryption, missing resources and incomplete archives fail. No archive paths are extracted to the filesystem.
+ZIP contains `project.json` (UTF-8 JSON, at most 16 KiB) and `assets/original` (unchanged encoded image, at most 64 MiB). An optional `assets/local-mask.json` contains the versioned region (at most 512 KiB). Complete archive limit: 65.5 MiB. Reading validates the central directory and paths, regular-file modes, payload CRCs, length, SHA-256, operation version and numerical bounds. Duplicate/unexpected paths, comments, ZIP64, encryption, missing resources and incomplete archives fail. No archive paths are extracted to the filesystem.
 
-The manifest contains `version: 4`, `pipeline: "srgb-soften-v4"`, `source: "assets/original"`, `sourceBytes`, lowercase `sourceSha256`, source-oriented `width` / `height`, a project `name` (1–80 characters, no control characters), and `edit`. Unknown fields and unsupported operations are rejected. Original source dimensions are at most 100,000,000 pixels and 32,768 pixels per edge after EXIF normalization; original metadata must match even when decoding a preview sample. Platform URIs and filesystem paths are never portable identifiers.
+The manifest contains `version: 5`, `pipeline: "srgb-region-v5"`, `source: "assets/original"`, `sourceBytes`, lowercase `sourceSha256`, source-oriented `width` / `height`, a project `name` (1–80 characters, no control characters), and `edit`. Unknown fields and unsupported operations are rejected. Original source dimensions are at most 100,000,000 pixels and 32,768 pixels per edge after EXIF normalization; original metadata must match even when decoding a preview sample. Platform URIs and filesystem paths are never portable identifiers.
 
 ## Edit parameters and order
 
@@ -58,7 +58,7 @@ Processing uses source strips with a radius-sized halo; it must match the full-i
 
 ## v1 / v2 / v3 migration
 
-Read the v1 `srgb-tone-crop-turn-v1` pipeline with its original source-coordinate crop, exposure, saturation and turns. All v2-only controls must be neutral in a v1 manifest. Convert the old crop rectangle into the quarter-turned full-image coordinate system, then upgrade to v4. This gives the same output for the supported v1 operations; never silently change a crop or drop an effect. V2 keeps its geometry and global adjustment semantics, with an empty local region and zero local exposure. Legacy versions cannot contain local operations or mask resources. V3 regions and local exposure are preserved while softening remains zero. Versions below v4 reject nonneutral softening parameters. New current projects save as v4. Older apps are expected to reject v4 rather than pretend it is editable.
+Read the v1 `srgb-tone-crop-turn-v1` pipeline with its original source-coordinate crop, exposure, saturation and turns. All v2-only controls must be neutral in a v1 manifest. Convert the old crop rectangle into the quarter-turned full-image coordinate system, then upgrade to v5. This gives the same output for the supported v1 operations; never silently change a crop or drop an effect. V2 keeps its geometry and global adjustment semantics, with an empty local region and zero local exposure. Legacy versions cannot contain local operations or mask resources. V3 regions and local exposure are preserved while softening remains zero. Versions below v4 reject nonneutral softening parameters. V4 strokes, local exposure, softening and detail protection retain their numerical semantics. New current projects save as v5. Older apps must reject v5 rather than silently drop base coverage. Versions below v5 cannot contain base coverage, including in the external mask resource.
 
 ## Local persistence boundary
 
@@ -75,3 +75,9 @@ The v4 operation schema and full-resolution pixel contract are unchanged. Resour
 ## Read-only detail inspection in 0.6
 
 No new fields or processing version are introduced. The inspector retains original-pixel scale and uses a bounded source region with neighborhood and JPEG decoder halos. It shares color stages with full rendering and uses whole-output coordinates for vignette. Canvas rasterization of a translated subregion can have small interpolation-rounding differences from rendering the whole image. Inspector position, comparison state and pixels are transient; inspecting a tool draft never commits or saves it.
+
+## V5 base coverage
+
+`assets/local-mask.json` contains `strokes` and optional `base` (null for a manual-only region). A base contains integer `width`/`height` in 1–256 and `hex`: exactly `width*height*2` lowercase hexadecimal characters, row-major unsigned 8-bit coverage. The whole grid spans the EXIF-normalized source rectangle; no screen or crop coordinates are stored. An empty stroke list with a base is still a nonempty region. The existing 512 KiB mask resource limit and integrity digest apply to the entire JSON, including strokes.
+
+Decode the base, bilinearly sample at the centers of the existing long-edge-1024 working coverage grid, then replay add/erase strokes using the v3 union/subtraction rules. Without a base the starting grid remains zero. Region replacement replaces both base and strokes as one undoable edit; manual correction retains the base. Preview, export and detail inspection consume the same saved coverage data and never rerun a model. A later model change does not change old projects. The generator uses at most 256 pixels on its longest side, but readers accept any bounded width/height pair; normalized sampling defines its meaning.

@@ -26,6 +26,7 @@ data class SharedPhoto(val uri: Uri, val mime: String)
 data class EditorUi(
     val project: Project? = null, val projectId: String? = null,
     val projects: List<ProjectLibrary.Entry> = emptyList(), val home: Boolean = true,
+    val suggestion: Region? = null, val suggestionOverlay: Bitmap? = null,
     val detail: DetailUi? = null, val preview: Bitmap? = null, val regionOverlay: Bitmap? = null, val approximatePreview: Boolean = false,
     val regionMode: RegionMode = RegionMode.ADD, val showRegion: Boolean = true,
     val brushRadius: Float = .06f, val brushHardness: Float = .5f,
@@ -194,7 +195,7 @@ class EditorViewModel @JvmOverloads constructor(application: Application,
         val state=mutable.value;val edit=state.draft ?: return
         if(state.busy || state.tool!=EditorTool.LOCAL || points.isEmpty()) return
         val stroke=MaskStroke(points.toList(),state.brushRadius,state.brushHardness,state.regionMode==RegionMode.ERASE)
-        val region=Region(edit.local.region.strokes+stroke)
+        val region=edit.local.region.copy(strokes=edit.local.region.strokes+stroke)
         try {region.validate();region.validateWork(state.project!!.manifest.width,state.project.manifest.height)} catch(error: IllegalArgumentException) {
             mutable.value=state.copy(error="区域笔画达到上限，请撤销部分笔画或清空区域");return
         }
@@ -203,6 +204,51 @@ class EditorViewModel @JvmOverloads constructor(application: Application,
     fun clearRegion() {
         val edit=mutable.value.draft ?: return
         updateDraft(edit.copy(local=edit.local.copy(region=Region())));localCheckpoint()
+    }
+    fun suggestRegion() {
+        val state=mutable.value
+        val edit=state.draft ?: return
+        val original=source ?: return
+        val project=state.project ?: return
+        if(state.tool!=EditorTool.LOCAL || state.busy || state.suggestion!=null) return
+        action("正在本机分析人像；取消后会等待本次分析结束") {
+            renderJob?.cancelAndJoin()
+            var pendingOverlay: Bitmap?=null
+            try {
+                // The action cancels pending autosave; preserve already-applied edits, never this draft.
+                saveCurrentIfNeeded()
+                mutable.value=mutable.value.copy(status="正在本机分析人像；取消后会等待本次分析结束")
+                val region=withContext(Dispatchers.Default) { pixelWork.withLock {
+                    require(ImageMemory.available(getApplication()) >= 80L*1024*1024) {
+                        "当前可用内存不足以分析人像，请继续手工涂选"
+                    }
+                    val job=currentCoroutineContext()
+                    val result=PortraitRegion.suggest(getApplication(),original) {job.ensureActive()}
+                    pendingOverlay=ImagePipeline.regionOverlay(project.manifest.width,project.manifest.height,
+                        edit.copy(local=edit.local.copy(region=result)))
+                    result
+                }}
+                mutable.value=mutable.value.copy(suggestion=region,suggestionOverlay=pendingOverlay,
+                    status="请检查建议区域，采用后仍可手工修正")
+                pendingOverlay=null
+            } finally {
+                pendingOverlay?.recycle()
+                if(mutable.value.dirty) scheduleSave()
+            }
+        }
+    }
+    fun dismissSuggestion() {
+        mutable.value=mutable.value.copy(suggestion=null,suggestionOverlay=null)
+    }
+    fun acceptSuggestion() {
+        val state=mutable.value
+        val region=state.suggestion ?: return
+        val edit=state.draft ?: return
+        dismissSuggestion()
+        updateDraft(edit.copy(local=edit.local.copy(region=region)))
+        localCheckpoint()
+        mutable.value=mutable.value.copy(showRegion=true,regionMode=RegionMode.ERASE,
+            status="已采用建议区域，可擦除眼镜、胡须和遮挡；应用调整后保存")
     }
     fun cropAspect(aspect: Float?) {
         val project=mutable.value.project ?: return
