@@ -89,6 +89,7 @@ class DetailRegionTest {
 
     @Test fun realDetailBrushPreservesBaseAndSupportsCancelUndoReopenAndExport() = runBlocking {
         val device=UiDevice.getInstance(instrumentation)
+        lateinit var model: EditorViewModel
         fun fresh() {if(android.os.Build.VERSION.SDK_INT>=34) instrumentation.uiAutomation.clearCache()}
         fun desc(label: String): UiObject {fresh();return device.findObject(UiSelector().description(label))}
         fun text(label: String): UiObject {fresh();return device.findObject(UiSelector().text(label))}
@@ -103,7 +104,17 @@ class DetailRegionTest {
             return node.takeIf {it.isEnabled}
         }
         fun tap(label: String) {await {actionable(label)!=null};requireNotNull(actionable(label)).click();device.waitForIdle()}
-        fun ready(count: Int) {await {desc("细节区域画布").exists() && text("细节区域 · $count 笔").exists()}}
+        fun ready(count: Int) {
+            fun frameReady(): Boolean = model.ui.value.let { ui ->
+                ui.detail?.loading==false && ui.detail.bitmap!=null &&
+                    ui.draft?.local?.region?.strokes?.size==count
+            }
+            // Accessibility can retain the preceding canvas while the new frame is rendering.
+            // Wait for the actual frame first, then let its UI/accessibility update settle.
+            await(::frameReady)
+            instrumentation.waitForIdleSync();device.waitForIdle()
+            await {frameReady() && desc("细节区域画布").exists() && text("细节区域 · $count 笔").exists()}
+        }
         fun nativeFrame(canvas: Rect): Rect {
             // API 29 can report a clipped accessibility rectangle. Locate the actual pixels
             // instead of assuming that rectangle and the native frame have the same center.
@@ -131,7 +142,6 @@ class DetailRegionTest {
         val id=library.create(project)
         val root=File(context.cacheDir,"detail-brush-${System.nanoTime()}").apply {mkdirs()}
         val scenario=ActivityScenario.launch(MainActivity::class.java)
-        lateinit var model: EditorViewModel
         scenario.onActivity { model=ViewModelProvider(it)[EditorViewModel::class.java] }
         val events=java.util.Collections.synchronizedList(mutableListOf<String>())
         fun state(): String = model.ui.value.let { "mode=${it.regionMode} strokes=${it.draft?.local?.region?.strokes?.size} " +
@@ -142,7 +152,12 @@ class DetailRegionTest {
             events.add("${android.os.SystemClock.uptimeMillis()} $message ${state()}")
         }
         val observer=CoroutineScope(Dispatchers.Default).launch { model.ui.collect { record("state") } }
-        fun clickFrame(x: Int,y: Int) { record("click $x,$y");device.click(x,y);record("click returned") }
+        fun clickFrame(x: Int,y: Int) {
+            record("click $x,$y")
+            assertTrue("A brush click requires a completed detail frame: ${state()}",
+                model.ui.value.detail?.let { !it.loading && it.bitmap!=null } == true)
+            assertTrue("Touch injection failed",device.click(x,y));record("click returned")
+        }
         try {
             await {desc("编辑预览").exists()};tap("局部");tap("查看细节");ready(0)
             tap("细节擦除")
