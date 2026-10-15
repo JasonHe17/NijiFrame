@@ -54,3 +54,16 @@ Java_dev_nijiframe_image_NativeTone_vignette(JNIEnv* env, jobject, jintArray arr
     env->ReleaseIntArrayElements(array, pixels, 0);
     if (result != 0) invalid(env);
 }
+
+extern "C" JNIEXPORT void JNICALL
+Java_dev_nijiframe_image_NativeTone_localExposure(JNIEnv* env, jobject, jintArray array, jbyteArray mask, jint count, jfloat ev) {
+    if (!array || !mask || count<0 || count>env->GetArrayLength(array) || count>env->GetArrayLength(mask)) { invalid(env); return; }
+    jint* pixels=env->GetIntArrayElements(array,nullptr);
+    if (!pixels) return;
+    jbyte* coverage=env->GetByteArrayElements(mask,nullptr);
+    if (!coverage) {env->ReleaseIntArrayElements(array,pixels,JNI_ABORT);return;}
+    const int result=nf_local_exposure(reinterpret_cast<uint32_t*>(pixels),reinterpret_cast<uint8_t*>(coverage),count,ev);
+    env->ReleaseByteArrayElements(mask,coverage,JNI_ABORT);
+    env->ReleaseIntArrayElements(array,pixels,0);
+    if (result!=0) invalid(env);
+}

@@ -47,3 +47,5 @@ ctest --test-dir build/native --output-on-failure
 | `image-core` | C++17 CPU 图像处理参考实现与 JNI 接口 |
 
 当前边界为后续平台扩展保留空间，不代表已有 Windows 客户端。进一步阅读[架构](architecture.md)、[工程格式](project-format.md)和[验证范围](validation.md)。
+
+For versioned alpha distribution and signing preparation, see [Release preparation](releases.md).

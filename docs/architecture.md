@@ -24,7 +24,7 @@ Rendering, image decoding, masks and previews have a shared memory budget. Initi
 
 The first color scope is SDR/sRGB. Normalize EXIF orientation once for the editing coordinate system and keep original bytes separately. Convert supported source profiles deliberately; reject unsupported formats or color representations with an actionable explanation. Experimental tone operations use linear sRGB; individual operations must state their own working space and version.
 
-A full-resolution render reduced to display size is the reference preview. Faster approximate previews require a defined quality policy; export always uses the authoritative processing definition. Effect radii must have explicit units independent from display scale.
+A full-resolution render reduced to display size is the reference preview. Large images also produce a labeled 800-pixel interactive approximation before settling to the reference; export always uses the authoritative processing definition. Effect radii must have explicit units independent from display scale.
 
 ## Persistence and product behavior
 
@@ -39,8 +39,8 @@ Accessibility starts with labeled actions, readable states, adequate touch targe
 1. Bootstrap the Android app, reproducible Gradle wrapper, editor state and CI checks.
 2. Import, display and adjust one image; persist a project and reopen it after process termination.
 3. Export with verified orientation, crop, resolution and color behavior.
-4. Add explicit local masks and a reference retouch implementation; validate automatic region assistance independently.
-5. Read, modify and return a project on Windows before adding many more edit operations.
+4. Explicit local masks and local exposure are implemented; natural portrait effects and automatic analysis remain separate candidates.
+5. Preserve portable operation semantics; perform Windows read/modify/return validation when a Windows implementation is scheduled.
 6. Improve performance and visual quality with physical-device measurements and user feedback.
 
 Before packaging a release, review dependency and model notices, source distribution obligations, applicable patent questions and the behavior of unsupported project versions. These tasks do not turn exploratory results into release-quality guarantees.
@@ -53,3 +53,10 @@ The home screen lists independent UUID-backed projects. EditorViewModel owns the
 Rendering uses cancellable strips and a monotonically increasing generation; older jobs cannot publish a preview over a newer state. Source decode/render work and project saves use separate mutexes. The crop tool draws an overlay over the full transformed source; dragging the rectangle updates only that overlay, and applying it renders the crop. Width/height, aspect and corner/move constraints live in editor-core rather than Android gesture coordinates.
 
 The platform layer handles file pickers, project thumbnails, format/size choices and a non-exported FileProvider restricted to generated shared photos. Share grants read access only to the selected output. Neither the portable manifest nor the native processing boundary contains Android URIs. Windows UI and decoder integration remain separate future work.
+
+
+## Local region editing
+
+One source-coordinate region consists of bounded immutable add/erase strokes. It is stored as a separate checksummed resource in v3 packages. Geometry mapping is shared by input and the selection overlay; exposure is applied before geometry, so subsequent crop/rotation does not move the region relative to source content. The UI explicitly switches between drawing and moving the canvas. The local tool keeps a draft history for completed strokes and exposure gestures; applying creates one main-history transaction, cancelling discards it. Presets preserve the region; original comparison suppresses all adjustments, including local exposure.
+
+The 1024-side coverage grid and source-unit brush radii are processing semantics, not a physical-device performance promise. Explicit limits bound resources and raster work. Automatic segmentation, edge snapping and natural skin processing are not enabled by this feature.

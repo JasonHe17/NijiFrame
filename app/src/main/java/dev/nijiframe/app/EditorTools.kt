@@ -49,6 +49,7 @@ internal fun ToolPanel(ui: EditorUi, editor: EditorViewModel, modifier: Modifier
             } else {
                 Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
                 when(tool) {
+                    EditorTool.LOCAL -> LocalPanel(ui,editor,draft)
                     EditorTool.LIGHT -> AdjustmentPanel(draft,editor,listOf(Adjustment.EXPOSURE,Adjustment.CONTRAST,
                         Adjustment.HIGHLIGHTS,Adjustment.SHADOWS,Adjustment.WHITES,Adjustment.BLACKS))
                     EditorTool.COLOR -> AdjustmentPanel(draft,editor,listOf(Adjustment.SATURATION,Adjustment.VIBRANCE,Adjustment.WARMTH,Adjustment.TINT))
@@ -112,4 +113,41 @@ private fun AdjustmentPanel(edit: Edit, editor: EditorViewModel, choices: List<A
     }
     Slider(value=adjustment.get(edit),onValueChange={editor.updateDraft(adjustment.set(edit,it))},valueRange=adjustment.range,
         modifier=Modifier.semantics {contentDescription="${adjustment.label}调整"})
+}
+
+@Composable
+private fun LocalPanel(ui: EditorUi, editor: EditorViewModel, draft: Edit) {
+    var setting by rememberSaveable {mutableStateOf("局部曝光")}
+    Row(Modifier.horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(6.dp)) {
+        RegionMode.entries.forEach { mode -> FilterChip(selected=ui.regionMode==mode,
+            onClick={editor.regionMode(mode)},label={Text(mode.label)}) }
+    }
+    Row(verticalAlignment=Alignment.CenterVertically) {
+        Checkbox(checked=ui.showRegion,onCheckedChange=editor::showRegion,modifier=Modifier.semantics {contentDescription="显示区域"})
+        Text("显示区域 · ${draft.local.region.strokes.size} 笔",style=MaterialTheme.typography.bodySmall)
+        TextButton(onClick=editor::clearRegion,enabled=draft.local.region.strokes.isNotEmpty()) {Text("清空区域")}
+    }
+    Row(Modifier.horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(6.dp)) {
+        listOf("局部曝光","笔刷大小","边缘硬度").forEach { item ->
+            FilterChip(selected=setting==item,onClick={setting=item},label={Text(item)})
+        }
+    }
+    when(setting) {
+        "笔刷大小" -> {
+            Text("直径 ${String.format(Locale.ROOT,"%.1f%%",ui.brushRadius*200)} · 相对原图短边",style=MaterialTheme.typography.labelMedium)
+            Slider(value=ui.brushRadius,onValueChange=editor::brushRadius,valueRange=.005f.. .25f,
+                modifier=Modifier.semantics {contentDescription="区域笔刷大小"})
+        }
+        "边缘硬度" -> {
+            Text(String.format(Locale.ROOT,"%.0f%%",ui.brushHardness*100),style=MaterialTheme.typography.labelMedium)
+            Slider(value=ui.brushHardness,onValueChange=editor::brushHardness,valueRange=0f..1f,
+                modifier=Modifier.semantics {contentDescription="区域边缘硬度"})
+        }
+        else -> {
+            Text(String.format(Locale.ROOT,"%.2f EV · 仅影响涂选区域",draft.local.exposureEv),style=MaterialTheme.typography.labelMedium)
+            Slider(value=draft.local.exposureEv,onValueChange={editor.updateDraft(draft.copy(local=draft.local.copy(exposureEv=it)))},
+                onValueChangeFinished=editor::localCheckpoint,valueRange=-3f..3f,
+                modifier=Modifier.semantics {contentDescription="局部曝光调整"})
+        }
+    }
 }

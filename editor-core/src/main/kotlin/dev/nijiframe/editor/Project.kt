@@ -14,8 +14,9 @@ data class Edit(val exposureEv: Float = 0f, val saturation: Float = 1f,
                 val tint: Float = 0f, val vibrance: Float = 0f,
                 val sharpen: Float = 0f, val vignette: Float = 0f,
                 val flipHorizontal: Boolean = false, val flipVertical: Boolean = false,
-                val straighten: Float = 0f) {
+                val straighten: Float = 0f, val local: LocalAdjustment = LocalAdjustment()) {
     fun validate(width: Int, height: Int, sourceCrop: Boolean = false) {
+        local.validate();local.region.validateWork(width,height)
         require(exposureEv.isFinite() && exposureEv in -3f..3f) { "Invalid exposure" }
         require(saturation.isFinite() && saturation in 0f..2f) { "Invalid saturation" }
         require(listOf(contrast, highlights, shadows, whites, blacks, warmth, tint, vibrance, vignette)
@@ -34,19 +35,24 @@ data class Edit(val exposureEv: Float = 0f, val saturation: Float = 1f,
 
 @Serializable
 data class Manifest(
-    val version: Int = 2,
-    val pipeline: String = "srgb-basic-v2",
+    val version: Int = 3,
+    val pipeline: String = "srgb-local-v3",
     val source: String = "assets/original",
     val sourceBytes: Int,
     val sourceSha256: String,
     val width: Int,
     val height: Int,
     val edit: Edit = Edit(),
-    val name: String = "Untitled"
+    val name: String = "Untitled",
+    val localMask: MaskResource? = null
 ) {
     fun validate() {
         require((version == 1 && pipeline == "srgb-tone-crop-turn-v1") ||
-            (version == 2 && pipeline == "srgb-basic-v2")) { "Unsupported project version or operation" }
+            (version == 2 && pipeline == "srgb-basic-v2") ||
+            (version == 3 && pipeline == "srgb-local-v3")) { "Unsupported project version or operation" }
+        if(version < 3) require(edit.local == LocalAdjustment() && localMask == null) { "Legacy project cannot contain local adjustments" }
+        localMask?.let { require(it.path == "assets/local-mask.json" && it.bytes in 1..ProjectIO.MAX_MASK_BYTES &&
+            it.sha256.matches(Regex("[0-9a-f]{64}"))) { "Invalid mask resource" } }
         require(name.isNotBlank() && name.length <= 80 && name.none { it.isISOControl() }) { "Invalid project name" }
         if (version == 1) require(edit == Edit(edit.exposureEv, edit.saturation, edit.turns, edit.crop)) {
             "Version 1 cannot contain new operations"
@@ -56,16 +62,16 @@ data class Manifest(
         require(width > 0 && height > 0 && width.toLong() * height <= MAX_PIXELS) { "Unsupported image dimensions" }
         edit.validate(width, height, sourceCrop = version == 1)
     }
-    fun current(): Manifest = if (version == 1) copy(version = 2, pipeline = "srgb-basic-v2",
-        edit = edit.copy(crop = edit.crop?.let { Geometry.legacyCrop(it,width,height,edit.turns) })) else this
+    fun current(): Manifest = copy(version = 3, pipeline = "srgb-local-v3",
+        edit = if(version == 1) edit.copy(crop = edit.crop?.let { Geometry.legacyCrop(it,width,height,edit.turns) }) else edit)
     companion object { const val MAX_PIXELS = 8_000_000L }
 }
 
 data class Project(val manifest: Manifest, val original: ByteArray) {
-    fun withEdit(edit: Edit): Project = copy(manifest = manifest.copy(version = 2, pipeline = "srgb-basic-v2", edit = edit))
+    fun withEdit(edit: Edit): Project = copy(manifest = manifest.copy(version = 3, pipeline = "srgb-local-v3", edit = edit, localMask = null))
 }
 
-/** History contains parameters only. A completed gesture contributes one entry. */
+/** History contains parameters and immutable region descriptions, never rendered bitmaps. A completed gesture contributes one entry. */
 class History(initial: Edit = Edit()) {
     var current: Edit = initial
         private set

@@ -14,6 +14,8 @@ import kotlinx.serialization.json.Json
 
 object ProjectIO {
     const val MAX_SOURCE_BYTES = 32 * 1024 * 1024
+    const val MAX_MASK_BYTES = 512 * 1024
+    private val allowed = setOf("project.json", "assets/original", "assets/local-mask.json")
     private const val MAX_MANIFEST_BYTES = 16 * 1024
     private val json = Json { encodeDefaults = true; ignoreUnknownKeys = false }
     fun digest(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256")
@@ -43,26 +45,34 @@ object ProjectIO {
     }
 
     fun read(input: InputStream): Project {
-        // Never extract paths to a filesystem. Only these two regular payloads are accepted.
+        // Never extract paths to a filesystem. Only these bounded regular payloads are accepted.
         val entries = mutableMapOf<String, ByteArray>()
-        val container = readBounded(input, MAX_SOURCE_BYTES + 1024 * 1024)
+        val container = readBounded(input, MAX_SOURCE_BYTES + MAX_MASK_BYTES + 1024 * 1024)
         validateContainer(container)
         ZipInputStream(container.inputStream()).use { zip ->
             while (true) {
                 val entry = zip.nextEntry ?: break
-                require(!entry.isDirectory && entry.name in setOf("project.json", "assets/original") &&
+                require(!entry.isDirectory && entry.name in allowed &&
                     entry.name !in entries) { "Unexpected or duplicate resource" }
-                val limit = if (entry.name == "project.json") MAX_MANIFEST_BYTES else MAX_SOURCE_BYTES
+                val limit = when(entry.name) { "project.json" -> MAX_MANIFEST_BYTES; "assets/local-mask.json" -> MAX_MASK_BYTES; else -> MAX_SOURCE_BYTES }
                 entries[entry.name] = readBounded(zip, limit)
                 zip.closeEntry()
             }
         }
-        require(entries.size == 2) { "Missing project resources" }
+        require(entries.size in 2..3) { "Missing project resources" }
         val manifest = json.decodeFromString<Manifest>(entries.getValue("project.json").decodeToString(throwOnInvalidSequence = true))
         manifest.validate()
         val original = entries.getValue(manifest.source)
         require(original.size == manifest.sourceBytes && digest(original) == manifest.sourceSha256) { "Source integrity check failed" }
-        return Project(manifest.current(), original)
+        val resource=manifest.localMask
+        require((resource != null) == entries.containsKey("assets/local-mask.json")) { "Missing or unexpected mask" }
+        val region=if(resource==null) Region() else {
+            val bytes=entries.getValue(resource.path)
+            require(bytes.size==resource.bytes && digest(bytes)==resource.sha256) { "Mask integrity check failed" }
+            json.decodeFromString<Region>(bytes.decodeToString(throwOnInvalidSequence=true)).also { it.validate() }
+        }
+        val current=manifest.current()
+        return Project(current.copy(localMask=null,edit=current.edit.copy(local=current.edit.local.copy(region=region))), original)
     }
 
     // Version 1 deliberately excludes comments, ZIP64, encryption and special files.
@@ -75,13 +85,13 @@ object ProjectIO {
         fun u32(at: Int): Long = u16(at).toLong() or (u16(at + 2).toLong() shl 16)
         val end = bytes.size - 22
         require(end >= 0 && u32(end) == 0x06054b50L && u16(end + 20) == 0 &&
-            u16(end + 4) == 0 && u16(end + 6) == 0 && u16(end + 8) == 2 && u16(end + 10) == 2) { "Incomplete or unsupported ZIP container" }
+            u16(end + 4) == 0 && u16(end + 6) == 0 && u16(end + 8) in 2..3 && u16(end + 10) == u16(end + 8)) { "Incomplete or unsupported ZIP container" }
         val offset = u32(end + 16)
         require(offset <= end && offset + u32(end + 12) == end.toLong()) { "Invalid ZIP directory" }
         var cursor = offset.toInt()
         val names = mutableSetOf<String>()
         val offsets = mutableSetOf<Long>()
-        repeat(2) {
+        repeat(u16(end + 8)) {
             require(cursor + 46 <= end && u32(cursor) == 0x02014b50L) { "Invalid ZIP entry" }
             val length = u16(cursor + 28)
             val next = cursor.toLong() + 46 + length + u16(cursor + 30) + u16(cursor + 32)
@@ -90,7 +100,7 @@ object ProjectIO {
             val mode = (u32(cursor + 38) shr 16).toInt() and 0xf000
             require(mode == 0 || mode == 0x8000) { "Special files are not supported" }
             val name = bytes.copyOfRange(cursor + 46, cursor + 46 + length).decodeToString(throwOnInvalidSequence = true)
-            require(name in setOf("project.json", "assets/original") && names.add(name)) { "Unexpected or duplicate resource" }
+            require(name in allowed && names.add(name)) { "Unexpected or duplicate resource" }
             val local = u32(cursor + 42)
             require(local < offset && offsets.add(local) && u32(local.toInt()) == 0x04034b50L) { "Invalid local entry" }
             val localNameLength = u16(local.toInt() + 26)
@@ -105,14 +115,22 @@ object ProjectIO {
         project.manifest.validate()
         require(project.original.size == project.manifest.sourceBytes &&
             digest(project.original) == project.manifest.sourceSha256) { "Source integrity check failed" }
+        val region=project.manifest.edit.local.region
+        val mask=if(region.strokes.isEmpty()) null else json.encodeToString(region).encodeToByteArray()
+        require(mask==null || mask.size<=MAX_MASK_BYTES) { "Mask exceeds size limit" }
+        val manifest=project.manifest.copy(localMask=mask?.let { MaskResource(bytes=it.size,sha256=digest(it)) })
+        manifest.validate()
+        val manifestBytes=json.encodeToString(manifest).encodeToByteArray()
+        require(manifestBytes.size<=MAX_MANIFEST_BYTES)
+        val payloads=mutableListOf("project.json" to manifestBytes, manifest.source to project.original)
+        if(mask!=null) payloads.add("assets/local-mask.json" to mask)
         // Close the deflater while retaining the caller's stream for fsync.
         ZipOutputStream(object : FilterOutputStream(output) {
             // FilterOutputStream otherwise expands a bulk write into one syscall per byte.
             override fun write(bytes: ByteArray, offset: Int, length: Int) { output.write(bytes, offset, length) }
             override fun close() { flush() }
         }).use { zip ->
-        for ((name, bytes) in listOf("project.json" to json.encodeToString(project.manifest).encodeToByteArray(),
-            project.manifest.source to project.original)) {
+        for ((name, bytes) in payloads) {
             zip.putNextEntry(ZipEntry(name).apply { time = 0 })
             zip.write(bytes)
             zip.closeEntry()

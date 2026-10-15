@@ -8,6 +8,7 @@
 | Native CTest | Neutral identity, known linear-light EV, saturation and warmth, clipping/invalid values, constant-image and impulse sharpening, radial vignette symmetry and strip equivalence, ASan/UBSan |
 | `EditorIntegrationTest` | Real Android ContentResolver/decoders/JNI, self-contained reopen after source deletion, all eight EXIF orientations, geometry and PNG dimensions, grayscale JPEG/GPS omission, sharpening strip seams, cancellation, latest-preview ownership, provider failures and automatic-save/new-viewmodel recovery |
 | `EditorUiTest` | Real system picker, pinch/pan/fit, draft cancel/apply, activity recreation, undo/redo, drag crop, flip, system Back with pending edits, landscape and portrait, PNG picker export and decoded pixels/dimensions, sharesheet, project duplicate/delete/rename/reopen |
+| `LocalEditingTest` | Region pixels/overlay through crop, straightening, flips and rotation; portable export after private source deletion; approximate-to-reference settling; local draft history, save/reopen and real brush UI |
 | `:app:lintDebug`, `:app:assembleDebug` | Android static analysis and both configured native ABIs |
 
 Use a dedicated test installation: the Gradle runner installs/uninstalls APKs, so export any projects that must survive a test run.
@@ -35,6 +36,6 @@ Local checks use Linux x86_64 and Android 16/API 36 x86_64. Arm64 APK content is
 
 The 8 MP / 32 MiB limits are current implementation bounds, not a promise of responsive operation on every phone. Native processing is cancellable between strips; platform decoder/provider I/O has platform-dependent cancellation latency. Saving uses synchronized file contents and atomic replacement, not a guarantee against all storage hardware failures. External providers can leave partial destinations on failure.
 
-UI checks cover touch/accessibility labels and reconfiguration, not a complete TalkBack audit or real-user study. Images are SDR/sRGB and opaque; new formats need explicit decoder/color tests. Portrait algorithms and regional edits remain future work; feature implementation or a dependency license is not patent clearance.
+UI checks cover touch/accessibility labels and reconfiguration, not a complete TalkBack audit or real-user study. Images are SDR/sRGB and opaque; new formats need explicit decoder/color tests. Portrait algorithms and automatic regions remain future work; feature implementation or a dependency license is not patent clearance.
 
-Historical foundation verification is preserved in Git history. Current v2 crop coordinates and project-library behavior are documented in `project-format.md` and must be used for new regression fixtures.
+Historical foundation verification is preserved in Git history. Current v3 region semantics and v2 crop coordinates and project-library behavior are documented in `project-format.md` and must be used for new regression fixtures.

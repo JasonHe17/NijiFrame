@@ -67,7 +67,7 @@ enum class Look(val label: String) {
     /** Looks replace global tone/detail settings, while preserving the user's geometry. */
     fun apply(edit: Edit): Edit {
         val base = Edit(turns = edit.turns, crop = edit.crop, flipHorizontal = edit.flipHorizontal,
-            flipVertical = edit.flipVertical, straighten = edit.straighten)
+            flipVertical = edit.flipVertical, straighten = edit.straighten, local = edit.local)
         return when (this) {
             NEUTRAL -> base
             NATURAL -> base.copy(contrast = 0.08f, shadows = 0.08f, vibrance = 0.18f, sharpen = 0.3f)

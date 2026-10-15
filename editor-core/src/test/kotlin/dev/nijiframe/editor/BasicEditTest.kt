@@ -20,7 +20,7 @@ class BasicEditTest {
             }
         }}.toByteArray()
         val result = ProjectIO.read(bytes.inputStream())
-        assertEquals(2, result.manifest.version)
+        assertEquals(3, result.manifest.version)
         assertEquals(Edit(1f,0.5f,1), result.manifest.edit)
         assertArrayEquals(source, result.original)
     }

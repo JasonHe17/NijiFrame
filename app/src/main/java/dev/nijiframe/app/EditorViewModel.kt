@@ -14,14 +14,18 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 enum class EditorTool(val label: String) {
-    LIGHT("明暗"), COLOR("颜色"), CROP("裁剪"), GEOMETRY("旋转"), DETAILS("细节"), LOOKS("预设")
+    LOCAL("局部"), LIGHT("明暗"), COLOR("颜色"), CROP("裁剪"), GEOMETRY("旋转"), DETAILS("细节"), LOOKS("预设")
 }
+enum class RegionMode(val label: String) { ADD("添加区域"), ERASE("擦除区域"), MOVE("移动画布") }
 enum class ExportDestination { PHOTO, PROJECT }
 data class SharedPhoto(val uri: Uri, val mime: String)
 data class EditorUi(
     val project: Project? = null, val projectId: String? = null,
     val projects: List<ProjectLibrary.Entry> = emptyList(), val home: Boolean = true,
-    val preview: Bitmap? = null, val busy: Boolean = false, val saving: Boolean = false,
+    val preview: Bitmap? = null, val regionOverlay: Bitmap? = null, val approximatePreview: Boolean = false,
+    val regionMode: RegionMode = RegionMode.ADD, val showRegion: Boolean = true,
+    val brushRadius: Float = .06f, val brushHardness: Float = .5f,
+    val localCanUndo: Boolean = false, val localCanRedo: Boolean = false, val busy: Boolean = false, val saving: Boolean = false,
     val rendering: Boolean = false, val comparing: Boolean = false, val dirty: Boolean = false,
     val canUndo: Boolean = false, val canRedo: Boolean = false,
     val tool: EditorTool? = null, val draft: Edit? = null, val cropAspect: Float? = null, val canCancel: Boolean = false,
@@ -39,7 +43,9 @@ class EditorViewModel @JvmOverloads constructor(application: Application,
     )))
     val ui=mutable.asStateFlow()
     private var source: Bitmap?=null
+    private var interactiveSource: Bitmap?=null
     private var history=History()
+    private var localHistory=History()
     private var savedManifest: Manifest?=null
     private var renderJob: Job?=null
     private var autoSaveJob: Job?=null
@@ -97,10 +103,14 @@ class EditorViewModel @JvmOverloads constructor(application: Application,
         val projects=withContext(Dispatchers.IO) { repository.library.entries() }
         mutable.value=mutable.value.copy(projects=projects)
     }
-    private fun install(id: String, loaded: Pair<Project,Bitmap>) {
+    private suspend fun install(id: String, loaded: Pair<Project,Bitmap>) {
         val (project,bitmap)=loaded
-        source=bitmap;history=History(project.manifest.edit);savedManifest=project.manifest
-        mutable.value=mutable.value.copy(project=project,projectId=id,home=false,preview=null,dirty=false,
+        source?.takeIf {it!==bitmap}?.recycle()
+        interactiveSource?.recycle()
+        source=bitmap
+        interactiveSource=withContext(Dispatchers.Default) {ImagePipeline.interactiveSource(bitmap)}
+        history=History(project.manifest.edit);savedManifest=project.manifest
+        mutable.value=mutable.value.copy(project=project,projectId=id,home=false,preview=null,regionOverlay=null,approximatePreview=false,dirty=false,
             canUndo=false,canRedo=false,tool=null,draft=null,cropAspect=null,comparing=false,status="所有修改已保存")
         render()
     }
@@ -139,7 +149,7 @@ class EditorViewModel @JvmOverloads constructor(application: Application,
     fun deleteProject(id: String) = action("正在删除工程") {
         withContext(Dispatchers.IO) { repository.library.delete(id);repository.thumbnail(id).delete() }
         if (mutable.value.projectId==id) {
-            renderJob?.cancelAndJoin();source=null;savedManifest=null
+            renderJob?.cancelAndJoin();source?.recycle();source=null;interactiveSource?.recycle();interactiveSource=null;savedManifest=null
             mutable.value=mutable.value.copy(project=null,projectId=null,preview=null,home=true,tool=null,draft=null,dirty=false,rendering=false)
         }
         refreshProjects();mutable.value=mutable.value.copy(status="工程已删除")
@@ -149,8 +159,41 @@ class EditorViewModel @JvmOverloads constructor(application: Application,
         if (mutable.value.busy || mutable.value.tool==tool) return
         if (mutable.value.tool!=null) applyTool()
         val edit=mutable.value.project?.manifest?.edit ?: return
-        mutable.value=mutable.value.copy(tool=tool,draft=edit,comparing=false)
+        localHistory=History(edit)
+        mutable.value=mutable.value.copy(tool=tool,draft=edit,comparing=false,localCanUndo=false,localCanRedo=false,
+            regionMode=RegionMode.ADD,showRegion=true)
         render()
+    }
+    fun regionMode(mode: RegionMode) {mutable.value=mutable.value.copy(regionMode=mode)}
+    fun showRegion(show: Boolean) {mutable.value=mutable.value.copy(showRegion=show)}
+    fun brushRadius(value: Float) {mutable.value=mutable.value.copy(brushRadius=value)}
+    fun brushHardness(value: Float) {mutable.value=mutable.value.copy(brushHardness=value)}
+    fun localCheckpoint() {
+        val edit=mutable.value.draft ?: return
+        localHistory.commit(edit)
+        mutable.value=mutable.value.copy(localCanUndo=localHistory.canUndo,localCanRedo=localHistory.canRedo)
+    }
+    fun localUndo() {
+        updateDraft(localHistory.undo())
+        mutable.value=mutable.value.copy(localCanUndo=localHistory.canUndo,localCanRedo=localHistory.canRedo)
+    }
+    fun localRedo() {
+        updateDraft(localHistory.redo())
+        mutable.value=mutable.value.copy(localCanUndo=localHistory.canUndo,localCanRedo=localHistory.canRedo)
+    }
+    fun addStroke(points: List<MaskPoint>) {
+        val state=mutable.value;val edit=state.draft ?: return
+        if(state.busy || state.tool!=EditorTool.LOCAL || points.isEmpty()) return
+        val stroke=MaskStroke(points.toList(),state.brushRadius,state.brushHardness,state.regionMode==RegionMode.ERASE)
+        val region=Region(edit.local.region.strokes+stroke)
+        try {region.validate();region.validateWork(state.project!!.manifest.width,state.project.manifest.height)} catch(error: IllegalArgumentException) {
+            mutable.value=state.copy(error="区域笔画达到上限，请撤销部分笔画或清空区域");return
+        }
+        updateDraft(edit.copy(local=edit.local.copy(region=region)));localCheckpoint()
+    }
+    fun clearRegion() {
+        val edit=mutable.value.draft ?: return
+        updateDraft(edit.copy(local=edit.local.copy(region=Region())));localCheckpoint()
     }
     fun cropAspect(aspect: Float?) {
         val project=mutable.value.project ?: return
@@ -199,17 +242,34 @@ class EditorViewModel @JvmOverloads constructor(application: Application,
         val original=source ?: return
         var parameters=temporary ?: state.draft ?: project.manifest.edit
         if (state.tool==EditorTool.CROP) parameters=parameters.copy(crop=null)
-        if (state.comparing) parameters=Look.NEUTRAL.apply(parameters)
+        if (state.comparing) parameters=Look.NEUTRAL.apply(parameters).copy(local=LocalAdjustment())
         val ticket=++generation
-        mutable.value=mutable.value.copy(rendering=true)
+        mutable.value=mutable.value.copy(rendering=true,regionOverlay=null)
         renderJob=viewModelScope.launch {
             try {
                 if (debounce) delay(80)
-                val bitmap=withContext(Dispatchers.Default) {
-                    pixelWork.withLock { ImagePipeline.preview(ImagePipeline.render(original,parameters)) }
+                val proxy=interactiveSource
+                // Interactive approximation is labeled; the settled full-resolution reference always replaces it.
+                if(proxy!=null) {
+                    val fast=withContext(Dispatchers.Default) {pixelWork.withLock {
+                        ImagePipeline.render(proxy,ImagePipeline.scaledEdit(parameters,original.width,original.height,proxy.width,proxy.height))
+                    }}
+                    if(ticket==generation) mutable.value=mutable.value.copy(preview=fast,approximatePreview=true)
+                    else fast.recycle()
+                    delay(250)
+                }
+                val (bitmap,overlay)=withContext(Dispatchers.Default) {
+                    pixelWork.withLock {
+                        val bitmap=ImagePipeline.preview(ImagePipeline.render(original,parameters))
+                        try {
+                            val overlay=if(state.tool==EditorTool.LOCAL && !state.comparing)
+                                ImagePipeline.regionOverlay(original.width,original.height,parameters) else null
+                            bitmap to overlay
+                        } catch(error: Throwable) {bitmap.recycle();throw error}
+                    }
                 }
                 if (ticket==generation) {
-                    mutable.value=mutable.value.copy(preview=bitmap,rendering=false)
+                    mutable.value=mutable.value.copy(preview=bitmap,regionOverlay=overlay,rendering=false,approximatePreview=false)
                     if (state.tool==null && !state.comparing && state.projectId!=null) {
                         withContext(Dispatchers.IO) { runCatching { repository.saveThumbnail(state.projectId,bitmap) } }
                     }
