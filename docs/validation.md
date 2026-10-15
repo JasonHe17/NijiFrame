@@ -4,14 +4,15 @@
 
 | Check | Scope |
 | --- | --- |
-| `:editor-core:test` | v1/v2 resource and parameter round-trip, source hashes, unsupported/corrupt ZIP rejection, history branches, failed-write recovery, geometry bounds/crop handles, no-upscale export dimensions, independent projects, rename/duplicate/delete and migration |
+| `:editor-core:test` | v1–v5 resource and parameter round-trip, source hashes, unsupported/corrupt ZIP rejection, history branches, failed-write recovery, geometry bounds/crop handles, no-upscale export dimensions, independent projects, rename/duplicate/delete and migration |
 | Native CTest | Neutral identity, known linear-light EV, saturation and warmth, clipping/invalid values, constant-image and impulse sharpening, radial vignette symmetry and strip equivalence, ASan/UBSan |
 | `EditorIntegrationTest` | Real Android ContentResolver/decoders/JNI, self-contained reopen after source deletion, all eight EXIF orientations, geometry and PNG dimensions, grayscale JPEG/GPS omission, sharpening strip seams, cancellation, latest-preview ownership, provider failures and automatic-save/new-viewmodel recovery |
 | `EditorUiTest` | Real system picker, pinch/pan/fit, draft cancel/apply, activity recreation, undo/redo, drag crop, flip, system Back with pending edits, landscape and portrait, PNG picker export and decoded pixels/dimensions, sharesheet, project duplicate/delete/rename/reopen |
 | `LocalEditingTest` | Region pixels/overlay through crop, straightening, flips and rotation; portable export after private source deletion; approximate-to-reference settling; local draft history, save/reopen and real brush UI |
 | `DetailRendererTest` / `DetailInspectorTest` | Region versus full rendering with halos, all EXIF orientations, crop/rotation/flip and vignette coordinates, 100 MP original texture without a full bitmap, real screenshot pixel scale, comparison, activity recreation and unchanged tool drafts/projects |
 | `LargeImageTest` | 12 MP JPEG full-size output and EXIF, 48 MP editable round trip and local/crop coordinates, 100 MP bounded preview and process-owner restore, >32 MiB encoded image integrity, sampled-alpha rejection and memory refusal before truncating an output |
-| `SofteningTest` | JNI/full-image versus halo-strip pixels, zero-strength and zero-mask identity, editable v4 round trip and independent PNG decode |
+| `SofteningTest` | JNI/full-image versus halo-strip pixels, zero-strength and zero-mask identity, editable softening round trip and independent PNG decode |
+| `PortraitRegionTest` | Real offline model inference with no face, failure/cancellation preserving existing edits, absence of network/upload components, synthetic non-face rejection and fallback cancellation, persisted base + manual correction, history, PNG and detail agreement |
 | `:app:lintDebug`, `:app:assembleDebug` | Android static analysis and both configured native ABIs |
 
 Use a dedicated test installation: the Gradle runner installs/uninstalls APKs, so export any projects that must survive a test run.
@@ -39,8 +40,12 @@ Local checks use Linux x86_64 and Android 16/API 36 x86_64. Arm64 APK content is
 
 The 100 MP / 64 MiB / 32,768-pixel-edge limits are current implementation bounds, not a promise of responsive operation on every phone. Native processing is cancellable between strips; platform decoder/provider I/O has platform-dependent cancellation latency. Saving uses synchronized file contents and atomic replacement, not a guarantee against all storage hardware failures. External providers can leave partial destinations on failure.
 
-UI checks cover touch/accessibility labels and reconfiguration, not a complete TalkBack audit or real-user study. Images are SDR/sRGB and opaque; new formats need explicit decoder/color tests. Softening is an experimental manually selected effect; automatic regions remain future work; feature implementation or a dependency license is not patent clearance.
+UI checks cover touch/accessibility labels and reconfiguration, not a complete TalkBack audit or real-user study. Images are SDR/sRGB and opaque; new formats need explicit decoder/color tests. Softening and geometric portrait suggestions remain experimental; feature implementation or a dependency license is not patent clearance.
+
+The positive-face evaluation uses separately retained licensed samples and real UI flows; these portraits are not checked into the repository or shipped. On the local API 36 emulator, six of eight evaluation images produced suggestions, P02/P05 failed explicitly, and a two-face composite was rejected. This is a small regression set, not an accuracy benchmark or aesthetic acceptance. The portable CI test exercises actual no-face inference and synthetic coverage; it does not claim to test the positive portrait set.
 
 Historical foundation verification is preserved in Git history. Current v3 region semantics and v2 crop coordinates and project-library behavior are documented in `project-format.md` and must be used for new regression fixtures.
 
 Large-image tests use generated synthetic inputs, not user photographs. A 100 MP import passing does not establish that a 100 MP full-resolution export fits a phone: original-size export still uses full-image bitmaps, and current memory admission can refuse it. Lower-resolution exports are explicit choices and use the original source, not a display screenshot. See [large-image handling](large-images.md).
+
+`FaceSearchTest` checks odd-sized search-window coverage, source-coordinate remapping, duplicate-location versus separate-location decisions, and subsequent edit geometry. These are synthetic geometry checks, not face-recognition accuracy or a labeled portrait benchmark. Private licensed evaluations remain outside the repository and hosted CI.

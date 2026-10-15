@@ -32,6 +32,8 @@ jobs:
           cmake -S image-core/src/main/cpp -B build/native -DCMAKE_BUILD_TYPE=Debug
           cmake --build build/native
           ctest --test-dir build/native --output-on-failure
+      - name: Record APK provenance
+        run: python3 scripts/apk-provenance.py app/build/outputs/apk/debug/app-debug.apk
       - name: Retain APK and build reports
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -40,6 +42,8 @@ jobs:
           retention-days: 7
           path: |
             app/build/outputs/apk/debug/*.apk
+            app/build/outputs/apk/debug/*.sha256
+            app/build/outputs/apk/debug/*.provenance.json
             app/build/reports/lint-results-debug.*
             editor-core/build/reports/tests/
             editor-core/build/test-results/

@@ -156,6 +156,7 @@ internal fun NijiFrame(editor: EditorViewModel) {
             }
         }
     }
+    if(ui.suggestion!=null) RegionSuggestionDialog(ui,editor)
     if(ui.detail!=null) DetailInspector(ui,editor)
     if(showExport) ExportDialog(ui,editor,onDismiss={showExport=false},onSavePhoto={
         showExport=false
@@ -265,7 +266,7 @@ private fun AboutDialog(onDismiss: () -> Unit) {
     }}
     AlertDialog(onDismissRequest=onDismiss,title={Text(if(licenses) "开源许可" else "关于 NijiFrame")},
         text={Column(Modifier.heightIn(max=400.dp).verticalScroll(rememberScrollState())) {
-            Text(if(licenses) text else "本地照片编辑器 · GPL-3.0-only\n\n照片在本机处理。支持 sRGB JPEG 和 8 位不透明 PNG，当前上限 1 亿像素、64 MiB，单边不超过 32768 像素。\n\n工程自动保存在本应用中；卸载前请导出重要工程。提供实验柔肤；Windows 接力仍在后续规划中。")
+            Text(if(licenses) text else "${BuildConfig.VERSION_NAME} · 构建 ${BuildConfig.VERSION_CODE}\n源码 ${BuildConfig.SOURCE_REVISION}\n\n本地照片编辑器 · GPL-3.0-only\n\n照片在本机处理。支持 sRGB JPEG 和 8 位不透明 PNG，当前上限 1 亿像素、64 MiB，单边不超过 32768 像素。\n\n工程自动保存在本应用中；卸载前请导出重要工程。提供实验柔肤；Windows 接力仍在后续规划中。")
             if(!licenses) TextButton(onClick={licenses=true}) {Text("查看开源许可")}
         }},confirmButton={TextButton(onClick=onDismiss) {Text("关闭")}})
 }

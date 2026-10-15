@@ -1,0 +1,18 @@
+# Portrait region implementation and patent leads
+
+Review date: 2026-10-15. Scope: the geometric suggestion in `PortraitRegion.kt`, saved base coverage in `LocalAdjustment.kt`, and its use with existing bilateral softening. This is an engineering comparison of selected published claims, not a freedom-to-operate opinion or an official legal-status search.
+
+| Published claim text | Comparison to this implementation |
+| --- | --- |
+| [CN112150393B](https://patents.google.com/patent/CN112150393B/zh), claims 1, 2, 4, 6 | Landmark-based face selection excluding eyes, brows and lips now overlaps the region-selection elements. The previous manual-only distinction no longer applies. Claims 1/6 additionally specify Gaussian processing and a particular fusion equation; this implementation uses existing range/spatial weighted averaging and bounded linear interpolation controlled by coverage, strength and local detail. It does not use that equation or a subsequent Gaussian blur of the face image. Claim 4 includes bilateral filtering: simply calling the filter bilateral is not a sufficient distinction. User confirmation and editability are product controls, not by themselves patent avoidance. |
+| [CN118015134A](https://patents.google.com/patent/CN118015134A/zh), claims 1, 9 | The described mask depends on identifying a skin-color type and retrieving its mean/standard deviation to calculate skin-color probabilities. This suggestion uses landmark geometry and distances; it does not implement that statistical skin-type pipeline. |
+| [US10593023B2](https://patents.google.com/patent/US10593023B2/en), claim 1 (earlier review carried forward) | Adding a landmark model does not add the described quality map, frequency separation, texture-synthesis and color-transformation network combination. It does increase the need to distinguish geometric inference from generative image processing. |
+
+The first two claim texts were reread for this change; Google Patents metadata is not authoritative confirmation of enforceability. Full prosecution histories, equivalents, all claims/families and jurisdictions, model/runtime-related patents, and design patents remain unreviewed. The landmark selection overlap is a continuing high-priority review item before a broad release. GPL/Apache licensing, independent implementation and a different UI do not establish clearance.
+
+
+## Bounded window fallback (2026-10-15)
+
+When the whole-image task has no landmarks, the same fixed model and thresholds run serially on at most five fixed overlapping windows. Landmark coordinates return to the original image; overlapping candidate locations are deduplicated, and distinct positions cause refusal. This does not recompose the user's photo or select an aesthetic crop. Source pixels, rendering and saved mask semantics remain unchanged.
+
+Additional search lead: [US11593585B2](https://patents.google.com/patent/US11593585B2/en), claims 1/2/20. The inspected claims describe differently configured color-transition detectors and/or foreground/background color sampling, adaptive pixel labeling, binarization and contours. This implementation repeats one unchanged landmark task over fixed inputs, and does not implement that explicit color-transition/adaptive-label chain. This is a limited technical distinction, not clearance for overlapping-window detection. The related family and model internals remain to be reviewed. US8649612B2 (parallel cascaded face detection) was also located, but its complete claim text was not retrieved in this review; no non-overlap conclusion is drawn for it. Existing landmark/softening overlap notes above still apply.

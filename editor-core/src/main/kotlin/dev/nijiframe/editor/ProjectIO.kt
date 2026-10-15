@@ -86,6 +86,8 @@ object ProjectIO {
             require(bytes.size==resource.bytes && digest(bytes)==resource.sha256) { "Mask integrity check failed" }
             json.decodeFromString<Region>(bytes.decodeToString(throwOnInvalidSequence=true)).also { it.validate() }
         }
+        require(manifest.version >= 5 || region.base == null) { "Legacy project cannot contain base coverage" }
+        region.validateWork(manifest.width,manifest.height)
         val current=manifest.current()
         return Project(current.copy(localMask=null,edit=current.edit.copy(local=current.edit.local.copy(region=region))), original)
     }
@@ -131,7 +133,7 @@ object ProjectIO {
         require(project.original.size == project.manifest.sourceBytes &&
             digest(project.original) == project.manifest.sourceSha256) { "Source integrity check failed" }
         val region=project.manifest.edit.local.region
-        val mask=if(region.strokes.isEmpty()) null else json.encodeToString(region).encodeToByteArray()
+        val mask=if(region.isEmpty) null else json.encodeToString(region).encodeToByteArray()
         require(mask==null || mask.size<=MAX_MASK_BYTES) { "Mask exceeds size limit" }
         val manifest=project.manifest.copy(localMask=mask?.let { MaskResource(bytes=it.size,sha256=digest(it)) })
         manifest.validate()

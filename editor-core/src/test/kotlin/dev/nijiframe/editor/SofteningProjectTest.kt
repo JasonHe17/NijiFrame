@@ -17,7 +17,7 @@ class SofteningProjectTest {
             "sourceSha256":"${ProjectIO.digest(source)}","width":64,"height":48,
             "edit":{"local":{"exposureEv":0.5}},"localMask":{"path":"assets/local-mask.json","bytes":${region.size},"sha256":"${ProjectIO.digest(region)}"}}""".encodeToByteArray()
         val result=ProjectIO.read(archive(listOf("project.json" to manifest,"assets/original" to source,"assets/local-mask.json" to region)).inputStream())
-        assertEquals(4,result.manifest.version);assertEquals(.5f,result.manifest.edit.local.exposureEv)
+        assertEquals(5,result.manifest.version);assertEquals(.5f,result.manifest.edit.local.exposureEv)
         assertEquals(0f,result.manifest.edit.local.soften);assertEquals(.75f,result.manifest.edit.local.detailProtection)
         assertEquals(1,result.manifest.edit.local.region.strokes.size);assertArrayEquals(source,result.original)
     }

@@ -4,6 +4,19 @@ plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
 }
+def versionSpec = new Properties()
+rootProject.file('version.properties').withInputStream { versionSpec.load(it) }
+def revision = providers.gradleProperty('sourceRevision').orNull
+if (revision == null && rootProject.file('.git').exists()) {
+    def gitOutput = { List<String> args -> providers.exec {
+        workingDir rootProject.projectDir
+        commandLine(['git'] + args)
+    }.standardOutput.asText.get().trim() }
+    revision = gitOutput(['rev-parse', 'HEAD'])
+    if (!gitOutput(['status', '--porcelain']).isEmpty()) revision += '-dirty'
+}
+revision = revision ?: 'unknown'
+if (!(revision ==~ /(?:[0-9a-f]{40}(?:-dirty)?|unknown)/)) throw new GradleException('Invalid sourceRevision')
 android {
     namespace 'dev.nijiframe.app'
     compileSdk 36
@@ -13,18 +26,20 @@ android {
         applicationId 'dev.nijiframe.app'
         minSdk 26
         targetSdk 36
-        versionCode 6
-        versionName '0.6.0-dev'
+        versionCode versionSpec.buildNumber.toInteger()
+        versionName "${versionSpec.productVersion}-dev.${versionSpec.buildNumber}"
+        buildConfigField 'String', 'SOURCE_REVISION', '"' + revision + '"'
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
         ndk { abiFilters 'arm64-v8a', 'x86_64' }
     }
-    buildFeatures { compose true }
+    buildFeatures { compose true; buildConfig true }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
     kotlinOptions { jvmTarget = '17' }
 }
 dependencies {
     implementation project(':editor-core')
     implementation project(':image-core')
+    implementation 'com.google.mediapipe:tasks-vision:1.1.0'
     implementation platform(libs.compose.bom)
     implementation libs.compose.material3
     implementation libs.activity.compose
@@ -45,6 +60,25 @@ def licenseAssets = tasks.register('prepareLicenseAssets', Sync) {
     from rootProject.file('licenses')
     from rootProject.file('LICENSE')
     from rootProject.file('THIRD_PARTY_NOTICES.md')
+    from(rootProject.file('models/README.md')) { rename { 'Portrait-model-provenance.md' } }
+    from rootProject.file('models/face-landmarker.properties')
 }
 android.sourceSets.main.assets.srcDir(layout.buildDirectory.dir('generated/licenseAssets'))
 tasks.named('preBuild').configure { dependsOn licenseAssets }
+
+apply from: 'model-assets.gradle'
+def buildInfo = tasks.register('prepareBuildInfo') {
+    inputs.property('revision', revision)
+    inputs.file(rootProject.file('version.properties'))
+    outputs.file(layout.buildDirectory.file('generated/buildInfo/build-info.json'))
+    doLast {
+        def output = layout.buildDirectory.file('generated/buildInfo/build-info.json').get().asFile
+        output.parentFile.mkdirs()
+        output.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson([
+            versionName: android.defaultConfig.versionName, versionCode: android.defaultConfig.versionCode,
+            sourceRevision: revision
+        ])) + '\n'
+    }
+}
+android.sourceSets.main.assets.srcDir(layout.buildDirectory.dir('generated/buildInfo'))
+tasks.named('preBuild').configure { dependsOn buildInfo }

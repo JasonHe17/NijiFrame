@@ -49,3 +49,14 @@ ctest --test-dir build/native --output-on-failure
 当前边界为后续平台扩展保留空间，不代表已有 Windows 客户端。进一步阅读[架构](architecture.md)、[工程格式](project-format.md)和[验证范围](validation.md)。
 
 For versioned alpha distribution and signing preparation, see [Release preparation](releases.md).
+
+## Pinned portrait model and build identity
+
+The first Android build downloads the 3,758,596-byte Face Landmarker bundle from the pinned official URL and verifies SHA-256. Gradle/Maven dependencies also need network access on a cold cache. After caching, ordinary builds reuse the verified asset. To supply the model offline after a clean build, download the exact file described in `models/face-landmarker.properties`, then run:
+
+```sh
+./gradlew :app:assembleDebug -PportraitModel=/path/to/face_landmarker.task
+python3 scripts/apk-provenance.py app/build/outputs/apk/debug/app-debug.apk
+```
+
+The supplied model must match the pinned checksum. A source archive without `.git` can specify `-PsourceRevision=<full-commit>`; otherwise About reports `unknown`. Normal Git builds determine their revision automatically and mark a dirty checkout. See [version policy](releases.md) before changing `version.properties`. Model licensing is documented in [model provenance](../models/README.md).

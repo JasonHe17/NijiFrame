@@ -8,8 +8,32 @@ import kotlin.math.*
 @Serializable data class MaskPoint(val x: Float, val y: Float)
 @Serializable data class MaskStroke(val points: List<MaskPoint>, val radius: Float = .06f,
     val hardness: Float = .5f, val erase: Boolean = false)
-@Serializable data class Region(val strokes: List<MaskStroke> = emptyList()) {
+/** Persisted suggestion; immutable lowercase hex, one unsigned coverage byte per pixel. */
+@Serializable data class BaseCoverage(val width: Int, val height: Int, val hex: String) {
     fun validate() {
+        require(width in 1..256 && height in 1..256 && hex.length == width * height * 2 &&
+            hex.all { it in '0'..'9' || it in 'a'..'f' }) { "Invalid base coverage" }
+    }
+    fun raster(): MaskRaster {
+        validate()
+        return MaskRaster(width, height, ByteArray(width * height) { i ->
+            ((hex[i*2].digitToInt(16) shl 4) or hex[i*2+1].digitToInt(16)).toByte()
+        })
+    }
+    companion object {
+        fun from(raster: MaskRaster): BaseCoverage {
+            val digits = "0123456789abcdef"
+            val text = buildString(raster.coverage.size * 2) {
+                for (byte in raster.coverage) { val v=byte.toInt() and 255; append(digits[v shr 4]); append(digits[v and 15]) }
+            }
+            return BaseCoverage(raster.width, raster.height, text).also { it.validate() }
+        }
+    }
+}
+@Serializable data class Region(val strokes: List<MaskStroke> = emptyList(), val base: BaseCoverage? = null) {
+    val isEmpty: Boolean get() = strokes.isEmpty() && base == null
+    fun validate() {
+        base?.validate()
         require(strokes.size <= MAX_STROKES && strokes.sumOf { it.points.size } <= MAX_POINTS) { "区域笔画过多，请撤销部分笔画" }
         strokes.forEach { stroke ->
             require(stroke.points.isNotEmpty() && stroke.radius.isFinite() && stroke.radius in .005f.. .25f &&
@@ -86,6 +110,9 @@ class MaskRaster(val width: Int,val height: Int,val coverage: ByteArray) {
             val scale=min(1.0,1024.0/max(sourceWidth,sourceHeight))
             val w=max(1,(sourceWidth*scale).roundToInt());val h=max(1,(sourceHeight*scale).roundToInt())
             val out=ByteArray(w*h);val scratch=ByteArray(w*h)
+            region.base?.raster()?.let { base ->
+                for(y in 0 until h) { check(); for(x in 0 until w) out[y*w+x]=base.sample((x+.5f)/w,(y+.5f)/h).toByte() }
+            }
             var visited=0L
             for(stroke in region.strokes) {
                 check();scratch.fill(0)

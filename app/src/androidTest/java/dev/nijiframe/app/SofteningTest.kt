@@ -48,7 +48,7 @@ class SofteningTest {
             val p=ProjectIO.create(bytes,300,200).withEdit(edit)
             val pkg=File(root,"portable.nijiproj");repository.exportProject(p,Uri.fromFile(pkg))
             val (loaded,decoded)=repository.open(Uri.fromFile(pkg))
-            assertEquals(edit,loaded.manifest.edit);assertEquals(4,loaded.manifest.version);assertArrayEquals(bytes,loaded.original)
+            assertEquals(edit,loaded.manifest.edit);assertEquals(5,loaded.manifest.version);assertArrayEquals(bytes,loaded.original)
             val png=File(root,"portrait.png")
             repository.exportPhoto(loaded,decoded,Uri.fromFile(png),ExportSettings(format=PhotoFormat.PNG))
             val exported=BitmapFactory.decodeFile(png.path);val expected=ImagePipeline.render(source,edit)

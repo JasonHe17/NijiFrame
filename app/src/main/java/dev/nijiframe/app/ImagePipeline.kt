@@ -190,7 +190,7 @@ object ImagePipeline {
             val parameters = floatArrayOf(edit.exposureEv, edit.saturation, edit.contrast, edit.highlights,
                 edit.shadows, edit.whites, edit.blacks, edit.warmth, edit.tint, edit.vibrance)
             val context=currentCoroutineContext()
-            val mask=if((edit.local.exposureEv!=0f || edit.local.soften!=0f) && edit.local.region.strokes.isNotEmpty())
+            val mask=if((edit.local.exposureEv!=0f || edit.local.soften!=0f) && !edit.local.region.isEmpty)
                 MaskRaster.create(edit.local.region,fullWidth,fullHeight) {context.ensureActive()} else null
             val buffer = IntArray(width * minOf(32, height))
             val maskStrip=if(mask!=null) ByteArray(buffer.size) else null
