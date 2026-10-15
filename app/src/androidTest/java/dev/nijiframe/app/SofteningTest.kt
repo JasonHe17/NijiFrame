@@ -55,7 +55,13 @@ class SofteningTest {
             assertTrue(expected.sameAs(exported));assertEquals(180,exported.width);assertEquals(260,exported.height)
             val without=ImagePipeline.render(source,edit.copy(local=edit.local.copy(soften=0f)))
             assertFalse(expected.sameAs(without))
-            val job=launch(Dispatchers.Default) {ImagePipeline.render(source,edit).recycle()};job.cancelAndJoin();assertTrue(job.isCancelled)
+            val job=launch(Dispatchers.Default) {
+                // Cancel at the renderer boundary; a fast render can finish before an external cancel request.
+                currentCoroutineContext().cancel()
+                ImagePipeline.render(source,edit).recycle()
+                fail("A cancelled renderer must not return a bitmap")
+            }
+            job.join();assertTrue(job.isCancelled)
             decoded.recycle();exported.recycle();expected.recycle();without.recycle()
         } finally {source.recycle();root.deleteRecursively()}
     }
