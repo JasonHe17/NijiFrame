@@ -8,6 +8,7 @@ import android.graphics.Rect
 import android.app.Application
 import android.net.Uri
 import androidx.lifecycle.ViewModelStore
+import androidx.lifecycle.ViewModelProvider
 import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.*
@@ -130,6 +131,18 @@ class DetailRegionTest {
         val id=library.create(project)
         val root=File(context.cacheDir,"detail-brush-${System.nanoTime()}").apply {mkdirs()}
         val scenario=ActivityScenario.launch(MainActivity::class.java)
+        lateinit var model: EditorViewModel
+        scenario.onActivity { model=ViewModelProvider(it)[EditorViewModel::class.java] }
+        val events=java.util.Collections.synchronizedList(mutableListOf<String>())
+        fun state(): String = model.ui.value.let { "mode=${it.regionMode} strokes=${it.draft?.local?.region?.strokes?.size} " +
+            "frame=${System.identityHashCode(it.detail)} revision=${it.detail?.revision} loading=${it.detail?.loading} " +
+            "bitmap=${it.detail?.bitmap?.width}x${it.detail?.bitmap?.height} error=${it.detail?.error}" }
+        fun record(message: String) = synchronized(events) {
+            if(events.size>=256) events.removeAt(0)
+            events.add("${android.os.SystemClock.uptimeMillis()} $message ${state()}")
+        }
+        val observer=CoroutineScope(Dispatchers.Default).launch { model.ui.collect { record("state") } }
+        fun clickFrame(x: Int,y: Int) { record("click $x,$y");device.click(x,y);record("click returned") }
         try {
             await {desc("编辑预览").exists()};tap("局部");tap("查看细节");ready(0)
             tap("细节擦除")
@@ -149,9 +162,9 @@ class DetailRegionTest {
             tap("局部");tap("查看细节");ready(0);tap("细节擦除")
             canvas=desc("细节区域画布").visibleBounds
             val frameBounds=nativeFrame(canvas)
-            device.click(frameBounds.left+210,frameBounds.top+240);device.waitForIdle();ready(1)
-            tap("细节添加")
-            device.click(frameBounds.left+110,frameBounds.top+320);device.waitForIdle();ready(2)
+            clickFrame(frameBounds.left+210,frameBounds.top+240);device.waitForIdle();ready(1)
+            record("before add mode");tap("细节添加");record("after add mode")
+            clickFrame(frameBounds.left+110,frameBounds.top+320);device.waitForIdle();ready(2)
             scenario.recreate();ready(2)
             device.setOrientationLeft()
             await {device.displayWidth>device.displayHeight && desc("细节区域画布").exists()}
@@ -188,6 +201,8 @@ class DetailRegionTest {
             // App UID cannot write directly to arbitrary Downloads paths on every supported API.
             // A secondary evidence failure must never replace the assertion that caused it.
             android.util.Log.e("DetailRegionTest","Detail correction assertion failed",error)
+            synchronized(events) { println(events.joinToString("\n")) }
+            runCatching { device.dumpWindowHierarchy(System.out) }
             runCatching {
                 device.executeShellCommand("mkdir -p /sdcard/Download/nijiframe-test-evidence")
                 device.dumpWindowHierarchy(File(context.cacheDir,"detail-brush-failure.xml"))
@@ -196,6 +211,7 @@ class DetailRegionTest {
             }.onFailure {error.addSuppressed(it)}
             throw error
         } finally {
+            observer.cancelAndJoin()
             device.setOrientationNatural();device.unfreezeRotation()
             scenario.close();source.recycle();library.delete(id);root.deleteRecursively()
             if(previous!=null && library.entries().any {it.id==previous}) library.markOpened(previous)
