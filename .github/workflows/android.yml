@@ -63,6 +63,8 @@ jobs:
       - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
       - name: Install SDK and emulator
         run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'ndk;28.2.13676358' 'cmake;3.22.1' 'emulator' 'system-images;android-${{ matrix.api }};default;x86_64'
+      - name: Compile test APKs before emulator boot
+        run: ./gradlew --no-daemon --max-workers=2 :app:assembleDebug :app:assembleDebugAndroidTest
       - name: Run Android project, local editing and UI checks
         shell: bash
         run: |
@@ -86,8 +88,9 @@ jobs:
           adb shell settings put global window_animation_scale 0
           adb shell settings put global transition_animation_scale 0
           adb shell settings put global animator_duration_scale 0
-          if ./gradlew :app:connectedDebugAndroidTest; then niji_test_status=0; else niji_test_status=$?; fi
+          if ./gradlew --no-daemon --max-workers=2 :app:connectedDebugAndroidTest; then niji_test_status=0; else niji_test_status=$?; fi
           adb pull /sdcard/Download/nijiframe-test-evidence app/build/ui-evidence || true
+          adb logcat -d > app/build/emulator-logcat.txt || true
           exit "$niji_test_status"
       - name: Retain Android test evidence
         if: always()
@@ -100,3 +103,4 @@ jobs:
             app/build/reports/androidTests/
             app/build/outputs/androidTest-results/
             app/build/ui-evidence/
+            app/build/emulator-logcat.txt
