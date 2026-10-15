@@ -134,8 +134,8 @@ private fun LocalPanel(ui: EditorUi, editor: EditorViewModel, draft: Edit) {
     }
     when(setting) {
         "柔肤（实验）" -> {
-            Text(if(draft.local.region.strokes.isEmpty()) "先涂选皮肤区域；未选区时不会改变照片。" else "实验效果，注意避开眼唇与发丝。",style=MaterialTheme.typography.bodySmall)
-            Text(String.format(Locale.ROOT,"柔肤强度 %.0f%%",draft.local.soften*100),style=MaterialTheme.typography.labelMedium)
+            Text(String.format(Locale.ROOT,"柔肤强度 %.0f%% · %s",draft.local.soften*100,
+                if(draft.local.region.strokes.isEmpty()) "请先涂选区域" else "实验效果，留意纹理"),style=MaterialTheme.typography.labelMedium)
             Slider(value=draft.local.soften,onValueChange={editor.updateDraft(draft.copy(local=draft.local.copy(soften=it)))},
                 onValueChangeFinished=editor::localCheckpoint,valueRange=0f..1f,
                 modifier=Modifier.semantics {contentDescription="柔肤强度调整"})
