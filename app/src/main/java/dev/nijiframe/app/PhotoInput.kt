@@ -156,9 +156,10 @@ internal object PhotoInput {
             5 -> Rect(t,l,b,r);6 -> Rect(t,h-r,b,h-l);7 -> Rect(w-b,h-r,w-t,h-l);8 -> Rect(w-b,l,w-t,r)
             else -> Rect(rect)
         }
-        // libwebp snaps odd crop origins down to an even pixel. Decode that aligned region,
-        // then trim it ourselves before applying EXIF so full and regional pixels agree.
-        val aligned=if(info.mime=="image/webp") Rect(encoded.left and -2,encoded.top and -2,
+        // WebP and newer HEIF region codecs snap odd origins to even pixels.
+        // API 37 HEIF returned a valid tile shifted by (-1,-1) for an odd origin.
+        // Decode an aligned region, then trim before EXIF so full and regional pixels agree.
+        val aligned=if(info.mime in setOf("image/webp","image/heif","image/heic")) Rect(encoded.left and -2,encoded.top and -2,
             minOf(w,(encoded.right+1) and -2),minOf(h,(encoded.bottom+1) and -2)) else encoded
         val heif=info.mime in setOf("image/heif","image/heic")
         val decoder=try {BitmapRegionDecoder.newInstance(bytes,0,bytes.size,false)} catch(error: java.io.IOException) {
