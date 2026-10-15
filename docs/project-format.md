@@ -71,3 +71,7 @@ System document providers do not guarantee atomic replacement. Keep a valid priv
 ## Expanded resource limits in 0.5
 
 The v4 operation schema and full-resolution pixel contract are unchanged. Resource bounds are now 100,000,000 pixels, 32,768 pixels per edge and 64 MiB for the encoded source; older v4 readers may reject larger resources. The UI uses original-resolution dimensions even when the decoder returns a sampled bitmap. Memory admission may refuse an operation below these format limits; refusal must preserve the saved project and must not silently reduce the selected export size. See [large-image handling](large-images.md).
+
+## Read-only detail inspection in 0.6
+
+No new fields or processing version are introduced. The inspector retains original-pixel scale and uses a bounded source region with neighborhood and JPEG decoder halos. It shares color stages with full rendering and uses whole-output coordinates for vignette. Canvas rasterization of a translated subregion can have small interpolation-rounding differences from rendering the whole image. Inspector position, comparison state and pixels are transient; inspecting a tool draft never commits or saves it.

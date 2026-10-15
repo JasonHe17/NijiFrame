@@ -82,7 +82,10 @@ internal fun EditorCanvas(ui: EditorUi, editor: EditorViewModel, modifier: Modif
         }
         if(!cropMode) Surface(Modifier.align(Alignment.BottomEnd).padding(8.dp),shape=MaterialTheme.shapes.small,
             color=MaterialTheme.colorScheme.surface.copy(alpha=.9f)) {
-            TextButton(onClick={zoom=1f;pan=Offset.Zero}) {Text("适应画布")}
+            Row {
+                TextButton(onClick=editor::openDetail,enabled=!ui.busy && !ui.rendering && bitmap!=null) {Text("查看细节")}
+                TextButton(onClick={zoom=1f;pan=Offset.Zero}) {Text("适应画布")}
+            }
         }
     }
 }

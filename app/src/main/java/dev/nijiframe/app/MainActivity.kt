@@ -130,6 +130,7 @@ internal fun NijiFrame(editor: EditorViewModel) {
                     Box {
                         IconButton(onClick={menu=true},enabled=!ui.busy,modifier=Modifier.semantics {contentDescription="编辑菜单"}) { Text("⋮") }
                         DropdownMenu(expanded=menu,onDismissRequest={menu=false}) {
+                            DropdownMenuItem(text={Text("原尺寸细节")},enabled=!ui.rendering && ui.preview!=null,onClick={menu=false;editor.openDetail()})
                             DropdownMenuItem(text={Text("保存工程")},onClick={menu=false;editor.applyTool();editor.save()})
                             DropdownMenuItem(text={Text("重命名")},onClick={menu=false;renameId=ui.projectId;renameText=ui.project?.manifest?.name.orEmpty()})
                             DropdownMenuItem(text={Text("重置全部调整")},onClick={menu=false;showReset=true})
@@ -155,6 +156,7 @@ internal fun NijiFrame(editor: EditorViewModel) {
             }
         }
     }
+    if(ui.detail!=null) DetailInspector(ui,editor)
     if(showExport) ExportDialog(ui,editor,onDismiss={showExport=false},onSavePhoto={
         showExport=false
         editor.prepareExport(ExportDestination.PHOTO)

@@ -1,6 +1,6 @@
 # Release preparation
 
-The current 0.5.0-dev APK is a development artifact, not a stable release. This document defines the next alpha distribution process; no production signing key or signed release is provided by the repository.
+The current 0.6.0-dev APK is a development artifact, not a stable release. This document defines the next alpha distribution process; no production signing key or signed release is provided by the repository.
 
 ## Version and artifacts
 
