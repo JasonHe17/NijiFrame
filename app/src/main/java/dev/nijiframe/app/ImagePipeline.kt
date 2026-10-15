@@ -15,6 +15,7 @@ import dev.nijiframe.editor.Manifest
 import dev.nijiframe.image.NativeTone
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlin.math.roundToInt
 
 object ImagePipeline {
     fun decode(bytes: ByteArray): Bitmap {
@@ -70,20 +71,27 @@ object ImagePipeline {
             val parameters = floatArrayOf(edit.exposureEv, edit.saturation, edit.contrast, edit.highlights,
                 edit.shadows, edit.whites, edit.blacks, edit.warmth, edit.tint, edit.vibrance)
             val context=currentCoroutineContext()
-            val mask=if(edit.local.exposureEv!=0f && edit.local.region.strokes.isNotEmpty())
+            val mask=if((edit.local.exposureEv!=0f || edit.local.soften!=0f) && edit.local.region.strokes.isNotEmpty())
                 MaskRaster.create(edit.local.region,width,height) {context.ensureActive()} else null
             val buffer = IntArray(width * minOf(32, height))
             val maskStrip=if(mask!=null) ByteArray(buffer.size) else null
+            val radius=(minOf(width,height)/600f).roundToInt().coerceIn(1,6)
+            val softenInput=if(mask!=null && edit.local.soften>0f) IntArray(width*minOf(32+2*radius,height)) else null
             for (y in 0 until height step 32) {
                 currentCoroutineContext().ensureActive()
                 val rows = minOf(32, height - y)
-                source.getPixels(buffer, 0, width, 0, y, width, rows)
-                NativeTone.applyBasic(buffer, width * rows, parameters)
                 if(mask!=null && maskStrip!=null) {
                     for(row in 0 until rows) for(x in 0 until width)
                         maskStrip[row*width+x]=mask.sample((x+.5f)/width,(y+row+.5f)/height).toByte()
-                    NativeTone.localExposure(buffer,maskStrip,width*rows,edit.local.exposureEv)
                 }
+                if(softenInput!=null && maskStrip!=null) {
+                    val first=maxOf(0,y-radius);val last=minOf(height,y+rows+radius)
+                    source.getPixels(softenInput,0,width,0,first,width,last-first)
+                    NativeTone.soften(softenInput,buffer,maskStrip,width,last-first,y-first,rows,radius,
+                        edit.local.soften,edit.local.detailProtection)
+                } else source.getPixels(buffer, 0, width, 0, y, width, rows)
+                NativeTone.applyBasic(buffer, width * rows, parameters)
+                if(maskStrip!=null) NativeTone.localExposure(buffer,maskStrip,width*rows,edit.local.exposureEv)
                 output.setPixels(buffer, 0, width, 0, y, width, rows)
             }
             currentCoroutineContext().ensureActive()

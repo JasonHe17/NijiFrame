@@ -128,11 +128,24 @@ private fun LocalPanel(ui: EditorUi, editor: EditorViewModel, draft: Edit) {
         TextButton(onClick=editor::clearRegion,enabled=draft.local.region.strokes.isNotEmpty()) {Text("清空区域")}
     }
     Row(Modifier.horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(6.dp)) {
-        listOf("局部曝光","笔刷大小","边缘硬度").forEach { item ->
+        listOf("局部曝光","柔肤（实验）","细节保护","笔刷大小","边缘硬度").forEach { item ->
             FilterChip(selected=setting==item,onClick={setting=item},label={Text(item)})
         }
     }
     when(setting) {
+        "柔肤（实验）" -> {
+            Text(String.format(Locale.ROOT,"柔肤强度 %.0f%% · %s",draft.local.soften*100,
+                if(draft.local.region.strokes.isEmpty()) "请先涂选区域" else "实验效果，留意纹理"),style=MaterialTheme.typography.labelMedium)
+            Slider(value=draft.local.soften,onValueChange={editor.updateDraft(draft.copy(local=draft.local.copy(soften=it)))},
+                onValueChangeFinished=editor::localCheckpoint,valueRange=0f..1f,
+                modifier=Modifier.semantics {contentDescription="柔肤强度调整"})
+        }
+        "细节保护" -> {
+            Text(String.format(Locale.ROOT,"细节保护 %.0f%% · 越高越保留局部变化",draft.local.detailProtection*100),style=MaterialTheme.typography.labelMedium)
+            Slider(value=draft.local.detailProtection,onValueChange={editor.updateDraft(draft.copy(local=draft.local.copy(detailProtection=it)))},
+                onValueChangeFinished=editor::localCheckpoint,valueRange=0f..1f,
+                modifier=Modifier.semantics {contentDescription="柔肤细节保护"})
+        }
         "笔刷大小" -> {
             Text("直径 ${String.format(Locale.ROOT,"%.1f%%",ui.brushRadius*200)} · 相对原图短边",style=MaterialTheme.typography.labelMedium)
             Slider(value=ui.brushRadius,onValueChange=editor::brushRadius,valueRange=.005f.. .25f,
