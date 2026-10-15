@@ -86,15 +86,18 @@ class EditorExperienceTest {
         await {model.ui.value.draft==null && !model.ui.value.saving && !model.ui.value.dirty}
         assertEquals(draft,library.read(id).manifest.edit)
         assertArrayEquals(initial.original,library.read(id).original)
-        assertTrue(device.hasObject(By.text("已保存")))
+        await {fresh();device.hasObject(By.text("已保存"))}
     }
 
     @Test fun portraitStepsShareBrushControlsAndKeepComparisonReadOnly() = withEditor { model,library,id,scenario ->
         val initial=library.read(id)
-        tap("人像修图");await {model.ui.value.tool==EditorTool.LOCAL && !model.ui.value.rendering}
+        tap("人像修图");await {model.ui.value.tool==EditorTool.LOCAL && !model.ui.value.rendering && desc("局部区域画布").exists()}
         tap("调整效果");await {model.ui.value.regionMode==RegionMode.MOVE && !model.ui.value.showRegion}
-        assertFalse(desc("局部区域画布").exists())
-        tap("选区与修正");await {model.ui.value.regionMode==RegionMode.ADD && model.ui.value.showRegion}
+        // StateFlow publication can precede Compose and accessibility updates.
+        // Wait for the rendered mode as well; never repeat the user action.
+        await {node("调整效果")?.isChecked==true && !desc("局部区域画布").exists()}
+        tap("选区与修正");await {model.ui.value.regionMode==RegionMode.ADD && model.ui.value.showRegion &&
+            node("选区与修正")?.isChecked==true && desc("局部区域画布").exists()}
         val canvas=desc("局部区域画布").visibleBounds
         device.click(canvas.centerX(),canvas.centerY())
         await {model.ui.value.draft!!.local.region.strokes.size==1 && !model.ui.value.rendering}
@@ -113,7 +116,7 @@ class EditorExperienceTest {
         await {model.ui.value.brushHardness<.45f}
         val revisedHardness=model.ui.value.brushHardness
         tap("查看原图");await {model.ui.value.detail?.comparing==true && model.ui.value.detail?.loading==false}
-        assertFalse(desc("细节区域画布").exists())
+        await {!desc("细节区域画布").exists() && desc("原尺寸细节图").exists()}
         val original=desc("原尺寸细节图").visibleBounds
         device.click(original.centerX(),original.centerY());device.waitForIdle()
         assertEquals(1,model.ui.value.draft!!.local.region.strokes.size)
@@ -138,7 +141,7 @@ class EditorExperienceTest {
                 device.setOrientationLeft()
                 await {device.displayWidth>device.displayHeight}
                 val initial=library.read(id).manifest
-                tap("人像修图");await {model.ui.value.tool==EditorTool.LOCAL && !model.ui.value.rendering}
+                tap("人像修图");await {model.ui.value.tool==EditorTool.LOCAL && !model.ui.value.rendering && desc("局部区域画布").exists()}
                 val canvas=desc("局部区域画布").visibleBounds
                 assertTrue("Landscape retains a usable canvas",canvas.width()>80 && canvas.height()>80)
                 assertTrue(requireNotNull(node("应用调整")).visibleBounds.height()>0)
