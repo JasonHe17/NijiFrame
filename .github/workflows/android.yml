@@ -21,6 +21,8 @@ jobs:
           java-version: '21'
       - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
         with:
+          # Command-line Tools 22.0; older tools misparse API 37.0 AVD targets.
+          cmdline-tools-version: '15859902'
           packages: platform-tools
       - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3; validates wrapper
       - name: Install declared Android components
@@ -75,6 +77,8 @@ jobs:
           java-version: '21'
       - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
         with:
+          # Command-line Tools 22.0; older tools misparse API 37.0 AVD targets.
+          cmdline-tools-version: '15859902'
           packages: platform-tools
       - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
       - name: Install SDK and emulator
@@ -91,6 +95,7 @@ jobs:
           mkdir -p "$ANDROID_AVD_HOME"
           echo no | avdmanager create avd --name ci --device pixel_6 --path "$ANDROID_AVD_HOME/ci.avd" --package 'system-images;android-${{ matrix.api }};${{ matrix.image }};x86_64'
           test -f "$ANDROID_AVD_HOME/ci.ini"
+          test "$(sed -n 's/^target=//p' "$ANDROID_AVD_HOME/ci.ini")" = 'android-${{ matrix.api }}'
           # Google APIs images need more userdata space than the AVD CLI default.
           sed -i '/^disk.dataPartition.size=/d' "$ANDROID_AVD_HOME/ci.avd/config.ini"
           echo 'disk.dataPartition.size=6G' >> "$ANDROID_AVD_HOME/ci.avd/config.ini"
