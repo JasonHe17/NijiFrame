@@ -1,7 +1,7 @@
 # Third-party components
 
 NijiFrame's own code is GPL-3.0-only. Third-party components retain their own terms.
-No portrait models, reference-app source, external photographs or research sample assets are included.
+No portrait models, reference-app source or research samples are bundled in the app. Repository documentation includes screenshots with a CC0 demonstration photograph; its source, author and terms are recorded in [docs/images/README.md](docs/images/README.md).
 
 | Component | Selected version | License / primary source |
 | --- | --- | --- |

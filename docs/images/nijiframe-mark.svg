@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 48 48" role="img" aria-label="NijiFrame">
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
+<rect width="48" height="48" rx="10" fill="#20252F"/>
+<path fill="#B9C6FF" d="M8,8h32v4h-28v28h-4zM36,16h4v24h-24v-4h20zM16,16h4l8,10v-10h4v16h-4l-8,-10v10h-4z"/>
+</svg>

@@ -1,62 +1,109 @@
-# NijiFrame
+<p align="center">
+  <img src="docs/images/nijiframe-mark.svg" alt="" width="80" height="80">
+</p>
 
-NijiFrame 是本地照片编辑开源项目，长期面向单人人像，先实现 Android 基础修图。当前开发版为 **0.2.0-dev**；Windows 接力保留工程与处理边界，人像特色工具仍属后续范围。
+<h1 align="center">NijiFrame</h1>
 
-## 基础功能
+<p align="center">
+  <strong>在本地修图，把原图和调整一起留下。</strong><br>
+  从 Android 出发的开源照片编辑器，面向日常照片与单人人像。<br>
+  从简单调整开始，也为每一张照片保留继续精调的空间。
+</p>
 
-| 区域 | 已实现 |
+<p align="center">
+  <a href="https://github.com/JasonHe17/NijiFrame/actions/workflows/android.yml?query=branch%3Amain"><img src="https://github.com/JasonHe17/NijiFrame/actions/workflows/android.yml/badge.svg?branch=main" alt="Android checks on main"></a>
+  <img src="https://img.shields.io/badge/platform-Android-3DDC84" alt="平台：Android">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0--only-7C6BC4" alt="许可证：GPL-3.0-only"></a>
+</p>
+
+<p align="center">
+  <a href="#features">功能</a> ·
+  <a href="#try">试用</a> ·
+  <a href="#direction">项目方向</a> ·
+  <a href="docs/user-guide.md">使用指南</a> ·
+  <a href="docs/development.md">参与开发</a>
+</p>
+
+> **开发中 · 0.2.0-dev**：当前已提供 Android 基础编辑流程，尚未发布稳定版。人像专用工具与 Windows 接力是后续方向。
+
+<p align="center">
+  <img src="docs/images/editor-light.jpg" width="300" alt="NijiFrame 实际明暗调整界面：人像预览、曝光滑杆和应用／取消按钮">
+  <img src="docs/images/editor-crop.jpg" width="300" alt="NijiFrame 实际裁剪界面：可拖动的裁剪框与比例选项">
+  <br>
+  <sub>Android 开发版实际界面：明暗调整与构图。示例照片：Gromovataya，CC0；<a href="docs/images/README.md">素材来源与截图说明</a>。</sub>
+</p>
+
+## 为什么做 NijiFrame
+
+我们希望修图既容易开始，也能让使用者掌握每一步调整。NijiFrame 从常用的光影、色彩与构图工具做起，逐步探索适合日常人像和写真照片的编辑体验。
+
+- **照片在本机处理。** 当前应用无需账号，无网络权限，编辑过程无需上传照片。
+- **原图和调整分开保存。** 可以尝试不同参数、对比原图，或创建独立副本探索另一种风格。导出工程后，下一次还能继续编辑。
+- **快速开始，保留精调。** 可以从自然、暖调、冷调、黑白预设出发，也可以逐项控制明暗、颜色和细节。
+- **源码与工程格式开放。** 自有代码采用 GPL-3.0-only，工程格式有文档，欢迎共同改进功能、体验与实现。
+
+<a id="features"></a>
+
+## 从一张照片，到一个可继续编辑的作品
+
+### 调整光影与色彩
+
+用曝光、对比度、高光、阴影、白色和黑色调整明暗；用饱和度、鲜艳度、色温和色调寻找合适的色彩。锐化与暗角用于细节和氛围调整，预设应用后仍可继续修改参数。
+
+### 找到合适的构图
+
+自由拖动裁剪框，或选择常用比例；旋转、水平／垂直翻转、校正倾斜。编辑时可以缩放查看细节、对比原图，并使用撤销与重做。
+
+### 保存进度，再决定如何分享
+
+已应用的修改会自动保存。主页集中管理多个工程，支持重命名、独立副本和删除。完成后可导出 JPEG／PNG，选择 JPEG 质量与输出尺寸，或通过 Android 系统分享。
+
+想保留后续调整的空间，就另存一份 **`.nijiproj` 工程**：它同时保存原图和编辑参数。照片导出用于展示，工程导出用于继续创作。
+
+<a id="try"></a>
+
+## 试用开发版
+
+当前还没有稳定版安装包。熟悉 Android 开发版安装的使用者可以：
+
+1. 打开 [Android checks](https://github.com/JasonHe17/NijiFrame/actions/workflows/android.yml?query=branch%3Amain)，选择 `main` 分支上成功的运行。
+2. 登录 GitHub，在该次运行的 **Artifacts** 中下载 `android-build-<提交号>`，解压取得 `app-debug.apk`。产物保留 7 天，过期后可[从源码构建](docs/development.md)。
+3. 安装后导入照片，选择工具并应用调整，再导出照片或工程。完整说明见[使用指南](docs/user-guide.md)。
+
+开发 APK 使用调试签名，尚未针对真实手机完成兼容性与性能验证。卸载或更换安装包签名前，请先导出需要保留的工程。
+
+### 当前支持范围
+
+| 项目 | 当前范围 |
 | --- | --- |
-| 工程主页 | 导入照片、打开可编辑工程、缩略图列表、重命名、创建独立副本、确认删除、恢复最近工程 |
-| 画布与交互 | 缩放、平移、双击缩放、适应画布、保留构图的原图对比、工具预览／应用／取消、撤销重做、横竖屏布局 |
-| 明暗与颜色 | 曝光、对比度、高光、阴影、白色、黑色、饱和度、鲜艳度、色温、色调 |
-| 构图 | 拖动自由裁剪、常用比例、移动裁剪框、90°旋转、水平／垂直翻转、角度校正 |
-| 细节与预设 | 锐化、暗角，以及原色、自然、暖调、冷调、黑白预设；参数可继续精调 |
-| 保存与分享 | 已应用修改自动保存、JPEG／PNG导出、JPEG质量与长边设置、系统分享、独立的`.nijiproj`工程导出 |
+| 平台 | Android；配置最低 Android 8.0／API 26，自动化模拟器验证覆盖 API 29、36 |
+| 输入 | sRGB JPEG、8 位不透明 PNG；单张不超过 800 万像素、32 MiB |
+| 输出 | JPEG／PNG；原尺寸或缩小长边，不放大小图；照片导出不复制原图元数据 |
+| 可编辑工程 | 实验性 `.nijiproj` v2，兼容读取 v1；工程包含原图及原有元数据 |
+| 保存 | 已应用的修改自动保存；未应用预览和跨次打开的完整撤销历史不属于持久保存内容 |
 
-照片在本机处理，无账号、网络权限或模型下载。自动磨皮、局部修复／蒙版、液化、生成式处理、图层合成、批量和 RAW/HDR 工作流不在当前基础版中。
+RAW／HDR、宽色域、透明图片、图层合成、批量处理和 AI 修图尚未提供。输入上限是当前实现边界，实际设备表现仍需验证。
 
-## 使用与数据保护
+<a id="direction"></a>
 
-1. 导入照片或打开工程，选择工具查看实时预览。点“应用调整”或切换工具会应用当前工具；“取消调整”还原本次工具中的修改。
-2. 已应用的修改自动保存；请留意“调整待应用”“自动保存中”“已保存”状态。未应用的工具预览不属于自动保存内容，进程结束后不保证恢复。重置全部调整可撤销；跨工程重开不保留完整撤销历史。
-3. 从“项目”回到主页管理多个作品。工程保存完整原图副本和参数，移动外部原图后仍可编辑。删除工程不删除外部原图；卸载应用会删除内部工程，请提前导出重要作品。
-4. “导出”可选择照片格式、质量、原尺寸或缩小长边；不会放大小图。导出照片不复制 GPS 等原图元数据。导出工程包含原图及其原始元数据，适合备份和继续编辑。
+## 项目方向
 
-当前输入范围为 sRGB JPEG 和 8 位不透明 PNG，上限 800 万像素、32 MiB。透明、宽色域、已识别的 HDR 增益图及其他不支持的输入会明确提示。此限制尚未经真机性能验证。工程格式仍为实验版本；可读取并迁移基础版 v1 工程，新保存使用 v2。
+**现在：做好基础编辑。** 打磨从导入、调整、保存到重开和导出的体验，收集真实设备上的问题与反馈。
 
-## 构建与检查
+**接下来：探索自然的人像调整。** 围绕单人日常照片与写真，研究局部控制、细节保留和可精调的人像工具；效果与可用性仍需验证。
 
-需要 JDK 21、Android SDK API 36、Build Tools 36.0.0、NDK 28.2.13676358、CMake 3.22.1。设置 `ANDROID_HOME` 或未提交的 `local.properties`；不依赖仓库外脚本。
+**更远：让可编辑工程跨设备流转。** 考虑 Android 与 Windows 之间继续编辑的工作流。当前已分离平台界面、编辑状态和处理核心，但尚无 Windows 客户端。
 
-```sh
-sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'ndk;28.2.13676358' 'cmake;3.22.1'
-./gradlew :editor-core:test :app:assembleDebug :app:lintDebug
-```
+这些是发展方向，具体范围会随验证结果调整；已实现内容见[基础版功能与验收清单](docs/basic-editor-plan.md)。
 
-APK：`app/build/outputs/apk/debug/app-debug.apk`，包含 arm64-v8a 和 x86_64。配置最低 API 26，实际验证范围单独记录，不以配置代替设备验证。
+## 一起改进
 
-使用专用 API 29+ 测试模拟器运行包含真实系统选择器和触控流程的 Android 检查。运行器会重装／卸载测试应用，需要保留的工程请先导出：
+欢迎提交可复现的问题、使用体验和改进建议。反馈问题时请附应用版本、Android 版本与操作步骤；只有在愿意公开且具备相应授权时才附示例图片。
 
-```sh
-./gradlew :app:connectedDebugAndroidTest
-./gradlew :app:installDebug
-```
+- [报告问题与提出建议](https://github.com/JasonHe17/NijiFrame/issues)
+- [构建与开发](docs/development.md) · [贡献说明](CONTRIBUTING.md)
+- [架构](docs/architecture.md) · [工程格式](docs/project-format.md) · [验证范围](docs/validation.md)
 
-Linux 上检查独立 C++ 核心（启用 ASan/UBSan）：
+## 许可
 
-```sh
-cmake -S image-core/src/main/cpp -B build/native -DCMAKE_BUILD_TYPE=Debug
-cmake --build build/native
-ctest --test-dir build/native --output-on-failure
-```
-
-[GitHub Actions](https://github.com/JasonHe17/NijiFrame/actions/workflows/android.yml) 执行构建、Lint、JVM/native 检查和 API 29／36 模拟器测试，保留报告与开发 APK。应查看具体提交的运行结果；历史失败不会被描述为通过。物理手机与 Windows 尚未验证。
-
-## 开发资料与许可
-
-- [基础版范围与验收清单](docs/basic-editor-plan.md)
-- [架构](docs/architecture.md)、[v2工程语义与v1迁移](docs/project-format.md)
-- [验证方法与覆盖范围](docs/validation.md)、[贡献说明](CONTRIBUTING.md)
-- [第三方来源与许可](THIRD_PARTY_NOTICES.md)
-
-项目自有代码采用 **GPL-3.0-only**，见 [LICENSE](LICENSE)。第三方组件保留各自许可；引入算法、模型和素材时分别核查来源、许可及相关专利问题。项目不授予无权许可的第三方专利权。
+NijiFrame 自有代码采用 [GPL-3.0-only](LICENSE)。第三方组件和展示素材保留各自许可，见[第三方声明](THIRD_PARTY_NOTICES.md)与[图片来源](docs/images/README.md)。项目不授予无权许可的第三方专利权。
