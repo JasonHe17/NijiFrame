@@ -5,6 +5,8 @@ import android.app.Application
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
+import android.graphics.BitmapRegionDecoder
+import android.graphics.Rect
 import android.net.Uri
 import androidx.exifinterface.media.ExifInterface
 import androidx.lifecycle.ViewModelStore
@@ -116,6 +118,8 @@ class LargeImageTest {
         val file=File(root,"phone.jpg")
         val source=Bitmap.createBitmap(4000,3000,Bitmap.Config.ARGB_8888)
         source.eraseColor(Color.rgb(80,80,80))
+        val detail=IntArray(100*100) { if((it/100+it%100)%2==0) Color.BLACK else Color.WHITE }
+        source.setPixels(detail,0,100,2000,1500,100,100)
         file.outputStream().use {source.compress(Bitmap.CompressFormat.JPEG,90,it)}
         source.recycle()
         ExifInterface(file).apply {setAttribute(ExifInterface.TAG_ORIENTATION,"6");saveAttributes()}
@@ -131,6 +135,14 @@ class LargeImageTest {
             assertEquals(3000,bounds.outWidth);assertEquals(4000,bounds.outHeight)
             val small=BitmapFactory.decodeFile(output.path,BitmapFactory.Options().apply {inSampleSize=8})
             try {assertTrue(Color.red(small.getPixel(100,100)) in 110..115)} finally {small.recycle()}
+            // A 1-pixel checker survives original decoding; enlarging the sampled preview would erase it.
+            @Suppress("DEPRECATION")
+            val decoder=BitmapRegionDecoder.newInstance(output.path,false)!!
+            try {
+                val patch=decoder.decodeRegion(Rect(1400,2000,1500,2100),BitmapFactory.Options())!!
+                try {assertTrue(kotlin.math.abs(Color.red(patch.getPixel(40,40))-Color.red(patch.getPixel(41,40)))>100)}
+                finally {patch.recycle()}
+            } finally {decoder.recycle()}
             assertEquals(ExifInterface.ORIENTATION_UNDEFINED,ExifInterface(output).getAttributeInt(ExifInterface.TAG_ORIENTATION,0))
         } finally {proxy.recycle();root.deleteRecursively()}
     }
