@@ -194,7 +194,7 @@ class LargeImageTest {
         assertThrows(IllegalArgumentException::class.java) {ImagePipeline.decode(bytes,2)}
     }
 
-    @Test fun encodedPhotoAboveThirtyTwoMiBImportsAndReopensWithoutTruncation() {
+    @Test fun encodedPhotoAboveThirtyTwoMiBImportsAndReopensWithoutTruncation() = runBlocking {
         val root=File(context.cacheDir,"large-file-${System.nanoTime()}").apply {mkdirs()}
         val file=File(root,"36mb.png")
         // RGB PNG with uncompressed deflate blocks: a real 12 MP, ~36 MB image, generated row by row.
@@ -238,14 +238,60 @@ class LargeImageTest {
             val (project,proxy)=repo.importPhoto(Uri.fromFile(file))
             try {
                 assertEquals(file.length(),project.original.size.toLong())
-                val id=repo.library.create(project)
+                val edit=Edit(exposureEv=1f,turns=1,crop=Crop(100,200,2500,3500))
+                val edited=project.withEdit(edit)
+                val id=repo.library.create(edited)
                 val (reopened,preview)=repo.read(id)
                 try {
                     assertEquals(project.manifest.sourceSha256,reopened.manifest.sourceSha256)
                     assertArrayEquals(project.original,reopened.original)
                     assertEquals(2000,preview.width)
+                    assertEquals(edit,reopened.manifest.edit)
                 } finally {preview.recycle()}
+                val portable=File(root,"large.nijiproj")
+                repo.exportProject(edited,Uri.fromFile(portable))
+                assertTrue(file.delete())
+                val (imported,decoded)=repo.open(Uri.fromFile(portable))
+                try {
+                    assertEquals(edited.manifest,imported.manifest)
+                    assertArrayEquals(project.original,imported.original)
+                    val output=File(root,"output.png")
+                    repo.exportPhoto(imported,decoded,Uri.fromFile(output),ExportSettings(PhotoFormat.PNG,maxEdge=1280))
+                    val result=BitmapFactory.decodeFile(output.path)
+                    try {
+                        assertEquals(914,result.width);assertEquals(1280,result.height)
+                        assertTrue(Color.red(result.getPixel(20,20)) in 110..115)
+                    } finally {result.recycle()}
+                } finally {decoded.recycle()}
             } finally {proxy.recycle()}
         } finally {root.deleteRecursively()}
     }
+    @Test fun projectMemoryRefusalPreservesLibraryAndCleansProviderStaging() {
+        val root=File(context.cacheDir,"project-memory-${System.nanoTime()}").apply {mkdirs()}
+        try {
+            val photo=Bitmap.createBitmap(64,48,Bitmap.Config.ARGB_8888)
+            val source=ByteArrayOutputStream()
+            try {photo.eraseColor(Color.GRAY);photo.compress(Bitmap.CompressFormat.PNG,100,source)} finally {photo.recycle()}
+            val project=ProjectIO.create(source.toByteArray(),64,48)
+            val repo=ProjectRepository(context,File(root,"library"))
+            val id=repo.library.create(project)
+            val saved=File(root,"library/$id.nijiproj")
+            val before=saved.readBytes()
+            val staging=File(context.cacheDir,"project-imports")
+            val prior=staging.list()?.toSet().orEmpty()
+            val limited=ProjectRepository(context,File(root,"library")) {1L*1024*1024}
+            for (attempt in listOf<() -> Unit>({limited.read(id)}, {limited.open(Uri.fromFile(saved))},
+                {limited.library.rename(id,"Refused")}, {limited.library.duplicate(id)})) {
+                val error=assertThrows(IllegalArgumentException::class.java) {attempt()}
+                assertTrue(error.message!!.contains("内存"))
+                assertArrayEquals(before,saved.readBytes())
+                assertEquals(id,repo.library.latest())
+                assertEquals(1,repo.library.entries().size)
+                assertEquals(prior,staging.list()?.toSet().orEmpty())
+            }
+            val (reopened,bitmap)=repo.read(id)
+            try {assertArrayEquals(project.original,reopened.original)} finally {bitmap.recycle()}
+        } finally {root.deleteRecursively()}
+    }
+
 }

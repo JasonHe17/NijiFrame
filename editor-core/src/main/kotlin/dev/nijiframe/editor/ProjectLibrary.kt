@@ -5,7 +5,7 @@ import java.io.File
 import java.util.UUID
 
 /** Private local catalog. Portable project identity never contains a filesystem path. */
-class ProjectLibrary(private val directory: File) {
+class ProjectLibrary(private val directory: File, private val beforeSourceAllocation: (Int) -> Unit = {}) {
     data class Entry(val id: String, val name: String, val modified: Long, val width: Int, val height: Int, val damaged: Boolean = false)
     private val lastFile get() = File(directory, "last-project")
     private fun file(id: String): File {
@@ -21,7 +21,7 @@ class ProjectLibrary(private val directory: File) {
         require(file(id).isFile) { "工程不存在" }
         ProjectIO.replaceAtomic(lastFile) { it.write(id.encodeToByteArray()) }
     }
-    fun read(id: String): Project = file(id).inputStream().use(ProjectIO::read)
+    fun read(id: String): Project = ProjectIO.read(file(id), beforeSourceAllocation)
     fun entries(): List<Entry> = directory.listFiles().orEmpty()
         .filter { it.extension == "nijiproj" && it.nameWithoutExtension.matches(Regex("[0-9a-f-]{36}")) }
         .map { path ->
@@ -51,7 +51,7 @@ class ProjectLibrary(private val directory: File) {
         val marker=File(directory,"legacy-imported")
         if (!legacy.isFile || marker.exists()) return
         val id="00000000-0000-4000-8000-000000000001"
-        if (!file(id).exists()) save(id,legacy.inputStream().use(ProjectIO::read))
+        if (!file(id).exists()) save(id,ProjectIO.read(legacy, beforeSourceAllocation))
         ProjectIO.replaceAtomic(marker) { it.write(id.encodeToByteArray()) }
     }
 }

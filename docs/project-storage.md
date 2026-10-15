@@ -1,0 +1,18 @@
+# Loading large editable projects
+
+Library reopening, automatic recovery, renaming, duplication and legacy recovery-file migration read saved projects directly from a seekable file. The reader validates the ZIP central directory first, then fills each resource's final array directly. It keeps neither an archive-sized byte array nor a second source-sized chunk buffer. A single file handle covers validation and reading so an atomic save cannot switch the file halfway through that read.
+
+Projects selected through Android's document provider may not be seekable. The app copies their stream into a uniquely named file in private cache using a 64 KiB buffer and the existing 65.5 MiB archive limit, then uses the same file reader. This requires temporary disk space up to the archive size. Completion or failure removes the temporary file; an interrupted process can leave a cache file, and initialization removes matching files older than 24 hours. Archive entry names never become filesystem extraction paths. Disk or provider failures do not replace an existing library project.
+
+The directory's original-resource size is checked against the 64 MiB source limit before allocation. Android also checks that its current available-memory estimate covers that array plus 32 MiB of working headroom, collecting unreachable buffers and retrying admission once when necessary. HEIF/AVIF decoding retains its separate codec admission. These checks are estimates, not allocation guarantees. An insufficient budget reports a retryable error while keeping saved projects intact.
+
+Validation still checks both directory and local entries, exact resource lengths, CRCs, SHA-256, versioned parameters and mask work limits. The file reader additionally compares central-directory sizes and CRCs with the payload stream. The portable project remains v6 and reads v1–v5; pixels, region coordinates and original bytes are unchanged. The `ProjectIO.read(InputStream)` convenience overload still buffers the container and is intended for small/in-memory callers; Android and `ProjectLibrary` use the file/staged overloads.
+
+## Boundaries and checks
+
+- A separate JVM test with a 96 MiB heap opens a generated archive containing a 64 MiB incompressible original through both library and staged-provider paths. This tests storage, not image decoding or phone performance.
+- Android regression uses a generated >32 MiB PNG through edit, save, local reopen, portable export/import and reduced photo export. Injected memory refusal preserves the old library contents and clears import staging.
+- File tests retain v1–v6 parameters, regions and originals and reject malformed paths, central sizes/CRCs, payload corruption, truncated or oversized containers. Failed provider reads and admission clean up staging.
+- Original bytes still reside in a `ByteArray` throughout editing. Initial photo import still has temporary byte-array copies. Source-file streaming, >64 MiB inputs, and tiled full-resolution photo export remain future work.
+
+The implementation uses standard [RandomAccessFile](https://developer.android.com/reference/java/io/RandomAccessFile) and [ZipInputStream](https://developer.android.com/reference/java/util/zip/ZipInputStream) APIs and introduces no dependency, codec, model or new processing algorithm. This is an I/O change to the existing self-contained project contract. It does not add network-address effect delivery or change the existing patent-review boundaries.

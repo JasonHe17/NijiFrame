@@ -18,8 +18,12 @@ class ProjectRepository(private val context: Context,
                         private val directory: File = File(context.filesDir, "library"),
                         private val availableMemory: () -> Long = { ImageMemory.available(context) }) {
     private val resolver = context.contentResolver
-    val library = ProjectLibrary(directory)
+    val library = ProjectLibrary(directory, ::requireProjectMemory)
+    private val importCache = File(context.cacheDir, "project-imports")
     fun prepare() {
+        // A killed process can leave a staged import. Do not touch recent files or saved projects.
+        importCache.listFiles()?.filter { it.name.startsWith("project-import-") && it.extension == "tmp" &&
+            System.currentTimeMillis() - it.lastModified() > 86_400_000 }?.forEach { it.delete() }
         if (directory == File(context.filesDir,"library"))
             library.migrateLegacy(File(context.filesDir,"projects/current.nijiproj"))
     }
@@ -50,7 +54,9 @@ class ProjectRepository(private val context: Context,
         } catch (error: Throwable) { bitmap.recycle(); throw error }
     }
     fun open(uri: Uri): Pair<Project, Bitmap> =
-        decode(requireNotNull(resolver.openInputStream(uri)) { "无法读取工程" }.use(ProjectIO::read))
+        decode(requireNotNull(resolver.openInputStream(uri)) { "无法读取工程" }.use {
+            ProjectIO.read(it, importCache, ::requireProjectMemory)
+        })
     fun read(id: String): Pair<Project,Bitmap> = decode(library.read(id))
     fun restore(): Pair<Project,Bitmap> = read(requireNotNull(library.latest()) { "还没有保存的工程，请先导入照片" })
     private fun decode(project: Project): Pair<Project, Bitmap> {
@@ -59,6 +65,11 @@ class ProjectRepository(private val context: Context,
         requireCodecMemory(info)
         val bitmap = ImagePipeline.decode(project.original, ImageSizing.previewSample(info.width, info.height), info)
         return project to bitmap
+    }
+    private fun requireProjectMemory(sourceBytes: Int) {
+        val required = sourceBytes.toLong() + 32L * 1024 * 1024
+        if (required > availableMemory()) System.gc()
+        require(required <= availableMemory()) { "当前内存不足以打开这份工程，请关闭其他应用后重试；已保存文件仍保留" }
     }
     private fun requireCodecMemory(info: ImagePipeline.ImageInfo) {
         if(info.codecHeadroom>0) require(info.codecHeadroom+32L*1024*1024<=availableMemory()) {"此 HEIF/AVIF 照片解码需要更多内存，请使用较小照片或由相册导出 JPEG；原文件未改变"}
