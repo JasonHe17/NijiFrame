@@ -4,7 +4,7 @@ The current 0.6.0 development-cycle APK is a development artifact, not a stable 
 
 ## Version and artifacts
 
-- `version.properties` owns `productVersion` and `buildNumber`. The present milestone remains **0.6.0** across feature branches; a feature merge alone does not advance the minor version. Current test artifact: **0.6.0-dev.8**, Android version code **8**.
+- `version.properties` owns `productVersion` and `buildNumber`. The present milestone remains **0.6.0** across feature branches; a feature merge alone does not advance the minor version. Current test artifact: **0.6.0-dev.9**, Android version code **9**.
 - Increment `buildNumber` before distributing a new test build, not for every commit, retry or CI job. Development fixes within an undistributed build can share the number; identify individual CI artifacts by commit and SHA-256. Never reuse a published build number for different test-delivery content. Historical 0.1–0.6 names are retained; no history or tags are rewritten.
 - Advance the product version only when defining a new product milestone and its acceptance scope. Alpha/beta/stable naming describes readiness and needs an explicit release decision; automated builds do not create a release. Project schema (currently v5) evolves independently when persistent semantics change.
 - Every APK embeds `assets/build-info.json` with version name/code and full source commit, and displays these under About. Local changes append `-dirty`; source archives without Git use `unknown` unless the builder supplies `-PsourceRevision=<40-character-commit>`. Distribute a reviewed, clean commit; do not label a dirty or unknown build as an exact source release.

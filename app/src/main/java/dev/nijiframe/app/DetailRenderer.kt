@@ -13,6 +13,23 @@ internal object DetailRenderer {
     const val MAX_EDGE = 768
     data class Frame(val bitmap: Bitmap, val bounds: Rect, val outputWidth: Int, val outputHeight: Int)
 
+    suspend fun regionOverlay(width: Int,height: Int,edit: Edit,bounds: Rect): Bitmap {
+        require(bounds.width() in 1..MAX_EDGE && bounds.height() in 1..MAX_EDGE)
+        val context=currentCoroutineContext()
+        val mask=MaskRaster.create(edit.local.region,width,height) {context.ensureActive()}
+        val mapping=SourceGeometry(width,height,edit)
+        val pixels=IntArray(bounds.width()*bounds.height())
+        for(y in 0 until bounds.height()) {
+            context.ensureActive()
+            for(x in 0 until bounds.width()) {
+                val point=mapping.toSource(bounds.left+x+.5f,bounds.top+y+.5f)
+                val coverage=point?.let {mask.sample(it.x,it.y)} ?: 0
+                pixels[y*bounds.width()+x]=(coverage*110/255 shl 24) or 0x00ff4060
+            }
+        }
+        return Bitmap.createBitmap(pixels,bounds.width(),bounds.height(),Bitmap.Config.ARGB_8888)
+    }
+
     suspend fun render(project: Project, edit: Edit, center: MaskPoint, width: Int, height: Int): Frame {
         val m=project.manifest
         edit.validate(m.width,m.height)
