@@ -42,6 +42,7 @@ jobs:
             app/build/outputs/apk/debug/*.apk
             app/build/reports/lint-results-debug.*
             editor-core/build/reports/tests/
+            editor-core/build/test-results/
             build/native/Testing/
   emulator:
     strategy:
@@ -62,7 +63,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
       - name: Install SDK and emulator
         run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'ndk;28.2.13676358' 'cmake;3.22.1' 'emulator' 'system-images;android-${{ matrix.api }};default;x86_64'
-      - name: Run Android file and rendering checks
+      - name: Run Android project, local editing and UI checks
         shell: bash
         run: |
           sudo chmod a+rw /dev/kvm
