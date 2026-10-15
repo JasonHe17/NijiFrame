@@ -45,6 +45,26 @@ class PortraitRegionTest {
             assertEquals(edit,repository.library.read(id).manifest.edit)
         } finally {instrumentation.runOnMainSync {store.clear()};input.recycle();root.deleteRecursively()}
     }
+    @Test fun fallbackRejectsNonFacesAndCancellationRetainsCallerBitmap() {
+        val random=java.util.Random(4242)
+        for(kind in 0..1) {
+            val pixels=IntArray(256*384) {i ->
+                if(kind==0) {if((i%256/16+i/256/16)%2==0) Color.WHITE else Color.BLACK}
+                else Color.rgb(random.nextInt(256),random.nextInt(256),random.nextInt(256))
+            }
+            val bitmap=Bitmap.createBitmap(pixels,256,384,Bitmap.Config.ARGB_8888)
+            try {
+                val error=assertThrows(IllegalArgumentException::class.java) {PortraitRegion.suggest(context,bitmap)}
+                assertTrue(error.message.orEmpty().contains("未找到清晰人脸"))
+                assertFalse(bitmap.isRecycled)
+                var checks=0
+                assertThrows(CancellationException::class.java) {
+                    PortraitRegion.suggest(context,bitmap) {if(++checks>=6) throw CancellationException("cancel during fallback")}
+                }
+                assertFalse(bitmap.isRecycled)
+            } finally {bitmap.recycle()}
+        }
+    }
     @Test fun baseCoverageSurvivesDraftCorrectionSaveExportAndDetail() = runBlocking {
         val input=Bitmap.createBitmap(240,160,Bitmap.Config.ARGB_8888).apply {eraseColor(Color.rgb(100,110,120))}
         val region=Region(base=BaseCoverage(3,2,"ffff00ffff00"))

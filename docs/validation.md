@@ -12,7 +12,7 @@
 | `DetailRendererTest` / `DetailInspectorTest` | Region versus full rendering with halos, all EXIF orientations, crop/rotation/flip and vignette coordinates, 100 MP original texture without a full bitmap, real screenshot pixel scale, comparison, activity recreation and unchanged tool drafts/projects |
 | `LargeImageTest` | 12 MP JPEG full-size output and EXIF, 48 MP editable round trip and local/crop coordinates, 100 MP bounded preview and process-owner restore, >32 MiB encoded image integrity, sampled-alpha rejection and memory refusal before truncating an output |
 | `SofteningTest` | JNI/full-image versus halo-strip pixels, zero-strength and zero-mask identity, editable softening round trip and independent PNG decode |
-| `PortraitRegionTest` | Real offline model inference with no face, failure/cancellation preserving existing edits, absence of network/upload components, persisted base + manual correction, history, PNG and detail agreement |
+| `PortraitRegionTest` | Real offline model inference with no face, failure/cancellation preserving existing edits, absence of network/upload components, synthetic non-face rejection and fallback cancellation, persisted base + manual correction, history, PNG and detail agreement |
 | `:app:lintDebug`, `:app:assembleDebug` | Android static analysis and both configured native ABIs |
 
 Use a dedicated test installation: the Gradle runner installs/uninstalls APKs, so export any projects that must survive a test run.
@@ -47,3 +47,5 @@ The positive-face evaluation uses separately retained licensed samples and real 
 Historical foundation verification is preserved in Git history. Current v3 region semantics and v2 crop coordinates and project-library behavior are documented in `project-format.md` and must be used for new regression fixtures.
 
 Large-image tests use generated synthetic inputs, not user photographs. A 100 MP import passing does not establish that a 100 MP full-resolution export fits a phone: original-size export still uses full-image bitmaps, and current memory admission can refuse it. Lower-resolution exports are explicit choices and use the original source, not a display screenshot. See [large-image handling](large-images.md).
+
+`FaceSearchTest` checks odd-sized search-window coverage, source-coordinate remapping, duplicate-location versus separate-location decisions, and subsequent edit geometry. These are synthetic geometry checks, not face-recognition accuracy or a labeled portrait benchmark. Private licensed evaluations remain outside the repository and hosted CI.
