@@ -15,3 +15,5 @@ The APK uses Android's normal app sandbox and user-selected files; that is not a
 Download/build instructions are in the [README](../README.md); details and draft persistence behavior are in the [user guide](user-guide.md). The Android instrumentation runner reinstalls/uninstalls the app, so run it on a dedicated emulator instead of a phone containing important projects.
 
 For 0.5 large-image checks, start with one ordinary JPEG from your phone. The editor should retain the original dimensions and identify a reduced preview. Try a 1280-edge export first, then a larger size if desired. Original-size output can be refused when memory is insufficient; do not stress a daily-use phone by repeatedly retrying the same refusal. Keep high-volume, maximum-size and low-memory automation on a dedicated emulator. See [high-resolution photos](large-images.md).
+
+In 0.6, open **查看细节**, tap a position in the overview, and compare **查看原图／查看调整**. Close it and confirm a pending tool draft remains pending; cancel the draft and reopen the saved project. For ordinary phone trials, check a few positions rather than repeatedly moving through a maximum-sized input.

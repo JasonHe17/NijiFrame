@@ -38,6 +38,12 @@ int main() {
     assert(nf_vignette(chunks.data()+36,9,9,4,5,1) == 0);
     assert(chunks == vignette);
     assert(nf_vignette(chunks.data(),9,9,8,2,1) == -1);
+    std::vector<uint32_t> window(3*4,0xff808080);
+    assert(nf_vignette_region(window.data(),3,4,9,9,2,5,1)==0);
+    for(int y=0;y<4;++y) for(int x=0;x<3;++x) assert(window[y*3+x]==vignette[(y+5)*9+x+2]);
+    assert(nf_vignette_region(window.data(),3,4,9,9,7,5,1)==-1);
+    assert(nf_vignette_region(window.data(),3,4,9,9,-1,5,1)==-1);
+    assert(nf_vignette_region(window.data(),3,4,9,9,2,6,1)==-1);
     // Local exposure leaves zero coverage untouched and uses linear-light gain at full coverage.
     uint32_t local[] = {0xff808080u,0xff808080u,0xff808080u};
     const uint8_t mask[] = {0,128,255};

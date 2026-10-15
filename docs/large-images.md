@@ -6,7 +6,7 @@
 
 The unchanged encoded original stays in the project. EXIF-normalized original dimensions define all crop and region coordinates. Opening, saving, exporting a project and reopening it do not replace the original with a thumbnail.
 
-Sources above 8 MP or an 8192-pixel edge use a power-of-two decoder sample with an edge no larger than 2048 pixels. The screen preview is at most 1600 pixels and remains labeled as reduced. Zooming into it does not reveal original-resolution detail. Smaller sources retain the existing reference-preview path. Sampled PNG inputs with potential alpha are checked in bounded original-resolution regions, so an isolated transparent pixel cannot disappear into the sample and bypass the opaque-input requirement.
+Sources above 8 MP or an 8192-pixel edge use a power-of-two decoder sample with an edge no larger than 2048 pixels. The screen preview is at most 1600 pixels and remains labeled as reduced. Zooming into the main canvas does not reveal original-resolution detail. In 0.6, **查看细节** opens a separate, read-only original-resolution window; see [detail inspection](detail-inspection.md). Smaller sources retain the existing reference-preview path. Sampled PNG inputs with potential alpha are checked in bounded original-resolution regions, so an isolated transparent pixel cannot disappear into the sample and bypass the opaque-input requirement.
 
 ## Photo export
 

@@ -87,3 +87,13 @@ Java_dev_nijiframe_image_NativeTone_soften(JNIEnv* env, jobject, jintArray sourc
     env->ReleaseIntArrayElements(destination,output,0);
     if(result!=0) invalid(env);
 }
+
+extern "C" JNIEXPORT void JNICALL
+Java_dev_nijiframe_image_NativeTone_vignetteRegion(JNIEnv* env, jobject, jintArray array, jint width, jint height,
+    jint full_width, jint full_height, jint left, jint top, jfloat amount) {
+    if (!array || width <= 0 || height <= 0 || static_cast<int64_t>(width)*height > env->GetArrayLength(array)) {invalid(env);return;}
+    jint* pixels=env->GetIntArrayElements(array,nullptr);if(!pixels) return;
+    const int result=nf_vignette_region(reinterpret_cast<uint32_t*>(pixels),width,height,full_width,full_height,left,top,amount);
+    env->ReleaseIntArrayElements(array,pixels,0);
+    if(result!=0) invalid(env);
+}

@@ -17,12 +17,16 @@ enum class EditorTool(val label: String) {
     LOCAL("局部"), LIGHT("明暗"), COLOR("颜色"), CROP("裁剪"), GEOMETRY("旋转"), DETAILS("细节"), LOOKS("预设")
 }
 enum class RegionMode(val label: String) { ADD("添加区域"), ERASE("擦除区域"), MOVE("移动画布") }
+data class DetailUi(val center: MaskPoint=MaskPoint(.5f,.5f), val comparing: Boolean=false,
+    val loading: Boolean=false, val bitmap: Bitmap?=null, val bounds: android.graphics.Rect?=null,
+    val outputWidth: Int, val outputHeight: Int, val error: String?=null)
+
 enum class ExportDestination { PHOTO, PROJECT }
 data class SharedPhoto(val uri: Uri, val mime: String)
 data class EditorUi(
     val project: Project? = null, val projectId: String? = null,
     val projects: List<ProjectLibrary.Entry> = emptyList(), val home: Boolean = true,
-    val preview: Bitmap? = null, val regionOverlay: Bitmap? = null, val approximatePreview: Boolean = false,
+    val detail: DetailUi? = null, val preview: Bitmap? = null, val regionOverlay: Bitmap? = null, val approximatePreview: Boolean = false,
     val regionMode: RegionMode = RegionMode.ADD, val showRegion: Boolean = true,
     val brushRadius: Float = .06f, val brushHardness: Float = .5f,
     val localCanUndo: Boolean = false, val localCanRedo: Boolean = false, val busy: Boolean = false, val saving: Boolean = false,
@@ -47,6 +51,9 @@ class EditorViewModel @JvmOverloads constructor(application: Application,
     private var history=History()
     private var localHistory=History()
     private var savedManifest: Manifest?=null
+    private var detailJob: Job?=null
+    private var detailEdit: Edit?=null
+    private var detailGeneration=0L
     private var renderJob: Job?=null
     private var autoSaveJob: Job?=null
     private var actionJob: Job?=null
@@ -87,6 +94,7 @@ class EditorViewModel @JvmOverloads constructor(application: Application,
     fun cancelOperation() { actionJob?.cancel() }
     private fun action(status: String, block: suspend () -> Unit) {
         if (initialized.isCompleted && mutable.value.busy) return
+        closeDetail()
         actionJob=viewModelScope.launch {
             initialized.await()
             actions.withLock {
@@ -237,6 +245,7 @@ class EditorViewModel @JvmOverloads constructor(application: Application,
     fun previewEdit(edit: Edit) { if (!mutable.value.busy) render(edit,true) }
     fun compare() { mutable.value=mutable.value.copy(comparing=!mutable.value.comparing);render() }
     private fun render(temporary: Edit?=null, debounce: Boolean=false) {
+        closeDetail()
         renderJob?.cancel()
         val state=mutable.value
         val project=state.project ?: return
@@ -281,6 +290,65 @@ class EditorViewModel @JvmOverloads constructor(application: Application,
             catch (_: OutOfMemoryError) { mutable.value=mutable.value.copy(rendering=false,error="预览内存不足，请使用较小图片") }
         }
     }
+    fun openDetail() {
+        val state=mutable.value
+        val project=state.project ?: return
+        if(state.busy || state.rendering || state.preview==null) return
+        var edit=state.draft ?: project.manifest.edit
+        if(state.tool==EditorTool.CROP) edit=edit.copy(crop=null)
+        detailEdit=edit
+        val (w,h)=Geometry.outputSize(project.manifest.width,project.manifest.height,edit)
+        mutable.value=state.copy(detail=DetailUi(comparing=state.comparing,outputWidth=w,outputHeight=h))
+    }
+    fun closeDetail() {
+        detailJob?.cancel();detailGeneration++;detailEdit=null
+        if(mutable.value.detail!=null) mutable.value=mutable.value.copy(detail=null)
+    }
+    fun detailCenter(point: MaskPoint) {
+        val d=mutable.value.detail ?: return
+        if(!point.x.isFinite() || !point.y.isFinite()) return
+        val bounded=MaskPoint(point.x.coerceIn(0f,1f),point.y.coerceIn(0f,1f))
+        if(bounded==d.center) return
+        detailJob?.cancel();detailGeneration++
+        mutable.value=mutable.value.copy(detail=d.copy(center=bounded,
+            bitmap=null,bounds=null,error=null,loading=true))
+    }
+    fun detailCompare() {
+        val d=mutable.value.detail ?: return
+        detailJob?.cancel();detailGeneration++
+        mutable.value=mutable.value.copy(detail=d.copy(comparing=!d.comparing,bitmap=null,error=null,loading=true))
+    }
+    fun loadDetail(width: Int, height: Int) {
+        val d=mutable.value.detail ?: return
+        val project=mutable.value.project ?: return
+        var edit=detailEdit ?: return
+        if(d.comparing) edit=Look.NEUTRAL.apply(edit).copy(local=LocalAdjustment())
+        detailJob?.cancel()
+        val ticket=++detailGeneration
+        mutable.value=mutable.value.copy(detail=d.copy(loading=true,bitmap=null,error=null))
+        detailJob=viewModelScope.launch {
+            var pending: DetailRenderer.Frame?=null
+            try {
+                withContext(Dispatchers.Default) { pixelWork.withLock {
+                    val required=project.original.size.toLong()+64L*1024*1024
+                    if(required>ImageMemory.available(getApplication())) System.gc()
+                    require(required<=ImageMemory.available(getApplication())) {"当前内存不足以查看细节，请稍后重试；工程仍保留"}
+                    pending=DetailRenderer.render(project,edit,d.center,width,height)
+                }}
+                val frame=requireNotNull(pending)
+                if(ticket==detailGeneration && mutable.value.detail!=null) mutable.value=mutable.value.copy(
+                    detail=mutable.value.detail!!.copy(loading=false,bitmap=frame.bitmap,bounds=frame.bounds))
+                else frame.bitmap.recycle()
+                pending=null
+            } catch(cancelled: CancellationException) {throw cancelled}
+            catch(error: Exception) {if(ticket==detailGeneration) mutable.value=mutable.value.copy(
+                detail=mutable.value.detail?.copy(loading=false,error=message(error)))}
+            catch(_: OutOfMemoryError) {if(ticket==detailGeneration) mutable.value=mutable.value.copy(
+                detail=mutable.value.detail?.copy(loading=false,error="查看细节时内存不足；请关闭细节视图，工程仍保留"))}
+            finally {pending?.bitmap?.recycle()}
+        }
+    }
+
     private fun scheduleSave() {
         autoSaveJob?.cancel()
         val ticket=++saveGeneration

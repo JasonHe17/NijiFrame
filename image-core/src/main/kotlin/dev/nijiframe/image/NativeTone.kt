@@ -11,5 +11,7 @@ object NativeTone {
     /** EV, saturation, contrast, highlights, shadows, whites, blacks, warmth, tint, vibrance. */
     external fun applyBasic(pixels: IntArray, count: Int, parameters: FloatArray)
     external fun sharpen(source: IntArray, destination: IntArray, width: Int, height: Int, amount: Float)
+    external fun vignetteRegion(pixels: IntArray, width: Int, height: Int, fullWidth: Int, fullHeight: Int,
+        left: Int, top: Int, amount: Float)
     external fun vignette(pixels: IntArray, width: Int, fullHeight: Int, firstRow: Int, rows: Int, amount: Float)
 }

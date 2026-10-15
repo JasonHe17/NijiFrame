@@ -64,20 +64,23 @@ object ImagePipeline {
                 bitmap.getPixels(row, 0, bitmap.width, 0, y, bitmap.width, 1)
                 require(row.all { (it ushr 24) == 255 }) { "目前不支持含透明像素的图片" }
             }
-            val transform = Matrix()
-            when (info.orientation) {
-                2 -> transform.setScale(-1f, 1f)
-                3 -> transform.setRotate(180f)
-                4 -> transform.setScale(1f, -1f)
-                5 -> { transform.setRotate(90f); transform.postScale(-1f, 1f) }
-                6 -> transform.setRotate(90f)
-                7 -> { transform.setRotate(90f); transform.postScale(1f, -1f) }
-                8 -> transform.setRotate(270f)
-            }
+            val transform = orientationMatrix(info.orientation)
             val normalized = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, transform, false)
             if (normalized !== bitmap) bitmap.recycle()
             return normalized
         } catch (error: Throwable) { bitmap.recycle(); throw error }
+    }
+
+    internal fun orientationMatrix(orientation: Int)=Matrix().apply {
+        when(orientation) {
+            2 -> setScale(-1f,1f)
+            3 -> setRotate(180f)
+            4 -> setScale(1f,-1f)
+            5 -> {setRotate(90f);postScale(-1f,1f)}
+            6 -> setRotate(90f)
+            7 -> {setRotate(90f);postScale(1f,-1f)}
+            8 -> setRotate(270f)
+        }
     }
 
     private fun pngMayHaveAlpha(bytes: ByteArray): Boolean {
@@ -118,35 +121,8 @@ object ImagePipeline {
         edit.validate(source.width, source.height)
         val width = source.width
         val height = source.height
-        var output = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        var output = colorRegion(source, edit, width, height, 0, 0)
         try {
-            // Bounded strips keep global tone processing cancellable without a full pixel-array copy.
-            val parameters = floatArrayOf(edit.exposureEv, edit.saturation, edit.contrast, edit.highlights,
-                edit.shadows, edit.whites, edit.blacks, edit.warmth, edit.tint, edit.vibrance)
-            val context=currentCoroutineContext()
-            val mask=if((edit.local.exposureEv!=0f || edit.local.soften!=0f) && edit.local.region.strokes.isNotEmpty())
-                MaskRaster.create(edit.local.region,width,height) {context.ensureActive()} else null
-            val buffer = IntArray(width * minOf(32, height))
-            val maskStrip=if(mask!=null) ByteArray(buffer.size) else null
-            val radius=(minOf(width,height)/600f).roundToInt().coerceIn(1,6)
-            val softenInput=if(mask!=null && edit.local.soften>0f) IntArray(width*minOf(32+2*radius,height)) else null
-            for (y in 0 until height step 32) {
-                currentCoroutineContext().ensureActive()
-                val rows = minOf(32, height - y)
-                if(mask!=null && maskStrip!=null) {
-                    for(row in 0 until rows) for(x in 0 until width)
-                        maskStrip[row*width+x]=mask.sample((x+.5f)/width,(y+row+.5f)/height).toByte()
-                }
-                if(softenInput!=null && maskStrip!=null) {
-                    val first=maxOf(0,y-radius);val last=minOf(height,y+rows+radius)
-                    source.getPixels(softenInput,0,width,0,first,width,last-first)
-                    NativeTone.soften(softenInput,buffer,maskStrip,width,last-first,y-first,rows,radius,
-                        edit.local.soften,edit.local.detailProtection)
-                } else source.getPixels(buffer, 0, width, 0, y, width, rows)
-                NativeTone.applyBasic(buffer, width * rows, parameters)
-                if(maskStrip!=null) NativeTone.localExposure(buffer,maskStrip,width*rows,edit.local.exposureEv)
-                output.setPixels(buffer, 0, width, 0, y, width, rows)
-            }
             currentCoroutineContext().ensureActive()
             if (edit.straighten != 0f) {
                 val straight = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
@@ -203,6 +179,42 @@ object ImagePipeline {
             }
             return output
         } catch (error: Throwable) { output.recycle(); throw error }
+    }
+
+    /** Source-coordinate color stages; surrounding source pixels must be supplied for neighborhood halos. */
+    internal suspend fun colorRegion(source: Bitmap, edit: Edit, fullWidth: Int, fullHeight: Int, left: Int, top: Int): Bitmap {
+        val width=source.width; val height=source.height
+        val output=Bitmap.createBitmap(width,height,Bitmap.Config.ARGB_8888)
+        try {
+            // Bounded strips keep global tone processing cancellable without a full pixel-array copy.
+            val parameters = floatArrayOf(edit.exposureEv, edit.saturation, edit.contrast, edit.highlights,
+                edit.shadows, edit.whites, edit.blacks, edit.warmth, edit.tint, edit.vibrance)
+            val context=currentCoroutineContext()
+            val mask=if((edit.local.exposureEv!=0f || edit.local.soften!=0f) && edit.local.region.strokes.isNotEmpty())
+                MaskRaster.create(edit.local.region,fullWidth,fullHeight) {context.ensureActive()} else null
+            val buffer = IntArray(width * minOf(32, height))
+            val maskStrip=if(mask!=null) ByteArray(buffer.size) else null
+            val radius=(minOf(fullWidth,fullHeight)/600f).roundToInt().coerceIn(1,6)
+            val softenInput=if(mask!=null && edit.local.soften>0f) IntArray(width*minOf(32+2*radius,height)) else null
+            for (y in 0 until height step 32) {
+                currentCoroutineContext().ensureActive()
+                val rows = minOf(32, height - y)
+                if(mask!=null && maskStrip!=null) {
+                    for(row in 0 until rows) for(x in 0 until width)
+                        maskStrip[row*width+x]=mask.sample((left+x+.5f)/fullWidth,(top+y+row+.5f)/fullHeight).toByte()
+                }
+                if(softenInput!=null && maskStrip!=null) {
+                    val first=maxOf(0,y-radius);val last=minOf(height,y+rows+radius)
+                    source.getPixels(softenInput,0,width,0,first,width,last-first)
+                    NativeTone.soften(softenInput,buffer,maskStrip,width,last-first,y-first,rows,radius,
+                        edit.local.soften,edit.local.detailProtection)
+                } else source.getPixels(buffer, 0, width, 0, y, width, rows)
+                NativeTone.applyBasic(buffer, width * rows, parameters)
+                if(maskStrip!=null) NativeTone.localExposure(buffer,maskStrip,width*rows,edit.local.exposureEv)
+                output.setPixels(buffer, 0, width, 0, y, width, rows)
+            }
+            return output
+        } catch(error: Throwable) { output.recycle(); throw error }
     }
 
     fun interactiveSource(source: Bitmap): Bitmap? {

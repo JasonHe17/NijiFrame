@@ -90,11 +90,16 @@ int nf_sharpen(const uint32_t* source, uint32_t* destination, int width, int hei
 }
 
 int nf_vignette(uint32_t* pixels, int width, int full_height, int first_row, int rows, float amount) {
-    if (!pixels || width <= 0 || full_height <= 0 || first_row < 0 || rows <= 0 ||
+    return nf_vignette_region(pixels, width, rows, width, full_height, 0, first_row, amount);
+}
+
+int nf_vignette_region(uint32_t* pixels, int width, int rows, int full_width, int full_height, int left, int first_row, float amount) {
+    if (!pixels || width <= 0 || full_width <= 0 || full_height <= 0 || left < 0 || first_row < 0 || rows <= 0 ||
+        static_cast<int64_t>(left)+width > full_width ||
         static_cast<int64_t>(first_row)+rows > full_height || !std::isfinite(amount) || amount < -1 || amount > 1) return -1;
     if (amount == 0) return 0;
     for (int y = 0; y < rows; ++y) for (int x = 0; x < width; ++x) {
-        const float nx = width == 1 ? 0 : (2.0f*x/(width-1)-1);
+        const float nx = full_width == 1 ? 0 : (2.0f*(x+left)/(full_width-1)-1);
         const float ny = full_height == 1 ? 0 : (2.0f*(y+first_row)/(full_height-1)-1);
         const float radius = (nx*nx+ny*ny)*0.5f;
         const float gain = std::exp2(-1.5f*amount*radius*radius);
