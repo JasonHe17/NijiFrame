@@ -155,8 +155,23 @@ class LocalEditingTest {
             tap("项目");tap("Local test")
             await {desc("编辑预览").exists()}
             assertEquals(saved,library.read(id).manifest.edit)
+            if(device.executeShellCommand("settings get secure navigation_mode").trim()=="2") {
+                // Slider exclusion must leave Back available elsewhere on the screen edge.
+                tap("局部")
+                val edgeY=desc("局部区域画布").visibleBounds.centerY()
+                device.swipe(1,edgeY,device.displayWidth/4,edgeY,20)
+                find("当前工具还有未完成的调整")
+                tap("放弃本次调整")
+                assertEquals(saved,library.read(id).manifest.edit)
+            }
             device.executeShellCommand("mkdir -p /sdcard/Download/nijiframe-test-evidence")
             device.executeShellCommand("screencap -p /sdcard/Download/nijiframe-test-evidence/local-editor.png")
+        } catch(error: Throwable) {
+            device.executeShellCommand("mkdir -p /sdcard/Download/nijiframe-test-evidence")
+            device.executeShellCommand("screencap -p /sdcard/Download/nijiframe-test-evidence/local-failure.png")
+            device.dumpWindowHierarchy(File(context.cacheDir,"local-failure.xml"))
+            println("Local UI hierarchy: "+File(context.cacheDir,"local-failure.xml").readText())
+            throw error
         } finally {
             scenario.close();library.delete(id);previous?.let {library.markOpened(it)}
         }

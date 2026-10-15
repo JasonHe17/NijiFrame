@@ -23,7 +23,7 @@ object ProjectIO {
 
     fun create(original: ByteArray, width: Int, height: Int): Project =
         Project(Manifest(sourceBytes = original.size, sourceSha256 = digest(original),
-            width = width, height = height).also { it.validate() }, original.copyOf())
+            width = width, height = height, honorExifColorSpace = true).also { it.validate() }, original.copyOf())
 
     fun readBounded(input: InputStream, limit: Int): ByteArray {
         require(limit >= 0)

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 package dev.nijiframe.app
 
+import androidx.compose.foundation.systemGestureExclusion
+
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -90,7 +92,7 @@ internal fun DetailInspector(ui: EditorUi, editor: EditorViewModel) {
                                 val manifest=requireNotNull(ui.project).manifest
                                 Text("半径 ${(ui.brushRadius*min(manifest.width,manifest.height)).roundToInt()} 原图像素",style=MaterialTheme.typography.labelSmall)
                                 Slider(value=ui.brushRadius,onValueChange=editor::brushRadius,valueRange=.005f.. .25f,
-                                    modifier=Modifier.weight(1f).semantics {contentDescription="细节笔刷半径"})
+                                    modifier=Modifier.weight(1f).systemGestureExclusion().semantics {contentDescription="细节笔刷半径"})
                             }
                         }
                     }

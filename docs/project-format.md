@@ -1,4 +1,4 @@
-# Editable project format v5
+# Editable project format v6
 
 Status: implemented experimental processing contract, not a stable cross-platform guarantee. File extension `.nijiproj`; Android document export uses `application/octet-stream` to preserve this extension.
 
@@ -6,7 +6,7 @@ Status: implemented experimental processing contract, not a stable cross-platfor
 
 ZIP contains `project.json` (UTF-8 JSON, at most 16 KiB) and `assets/original` (unchanged encoded image, at most 64 MiB). An optional `assets/local-mask.json` contains the versioned region (at most 512 KiB). Complete archive limit: 65.5 MiB. Reading validates the central directory and paths, regular-file modes, payload CRCs, length, SHA-256, operation version and numerical bounds. Duplicate/unexpected paths, comments, ZIP64, encryption, missing resources and incomplete archives fail. No archive paths are extracted to the filesystem.
 
-The manifest contains `version: 5`, `pipeline: "srgb-region-v5"`, `source: "assets/original"`, `sourceBytes`, lowercase `sourceSha256`, source-oriented `width` / `height`, a project `name` (1–80 characters, no control characters), and `edit`. Unknown fields and unsupported operations are rejected. Original source dimensions are at most 100,000,000 pixels and 32,768 pixels per edge after EXIF normalization; original metadata must match even when decoding a preview sample. Platform URIs and filesystem paths are never portable identifiers.
+The manifest contains `version: 6`, `pipeline: "srgb-import-v6"`, `source: "assets/original"`, `sourceBytes`, lowercase `sourceSha256`, source-oriented `width` / `height`, a project `name` (1–80 characters, no control characters), `edit`, and `honorExifColorSpace` (boolean). Unknown fields and unsupported operations are rejected. Original source dimensions are at most 100,000,000 pixels and 32,768 pixels per edge after EXIF normalization; original metadata must match even when decoding a preview sample. Platform URIs and filesystem paths are never portable identifiers.
 
 ## Edit parameters and order
 
@@ -25,7 +25,7 @@ The manifest contains `version: 5`, `pipeline: "srgb-region-v5"`, `source: "asse
 | sharpen | 0 / [0,2] | Unsharp amount using a 3×3 Gaussian stencil in encoded RGB |
 | vignette | 0 / [-1,1] | Radial exposure falloff; positive darkens corners |
 
-1. Decode opaque 8-bit SDR/sRGB, normalize EXIF orientation once and retain original encoded bytes. Current supported input remains JPEG/opaque PNG; transparency, detected HDR and unsupported color spaces fail explicitly.
+1. Decode supported opaque sources, convert recognized RGB profiles into 8-bit sRGB, use the SDR base of compatible Ultra HDR JPEG, normalize orientation once and retain original encoded bytes. HEIF uses the platform codec plus EXIF; AVIF uses ImageDecoder container orientation. See [photo input](photo-input.md) for exact color/codec rules and memory limits.
 2. Apply the optional source-coordinate softening candidate below, then decode each sRGB channel to linear light with the standard 0.04045/12.92, 0.055/1.055, 2.4 transfer function, then apply exposure.
 3. Let `Y = clamp(0.2126 R + 0.7152 G + 0.0722 B, 0, 1)`, `S=(1-Y)^2`, `H=Y^2`. The additive lift is `0.25*(shadows*S + highlights*H + whites*H^2) + 0.15*blacks*S^2`. Apply lift and contrast about 0.18, flooring negative values at zero.
 4. Multiply R/G/B respectively by `2^(0.4*warmth)`, `2^(-0.3*tint)`, `2^(-0.4*warmth)`. With `chroma=(max-min)/max` (zero at black), effective saturation is `saturation*(1+vibrance*(1-chroma))`. Mix each channel around its linear luminance, clip [0,1], apply inverse sRGB transfer, and round to nearest 8-bit value. If all new tone parameters are zero, use the exact v1 tone path; neutral tone is decoded-pixel identity.
@@ -58,7 +58,7 @@ Processing uses source strips with a radius-sized halo; it must match the full-i
 
 ## v1 / v2 / v3 migration
 
-Read the v1 `srgb-tone-crop-turn-v1` pipeline with its original source-coordinate crop, exposure, saturation and turns. All v2-only controls must be neutral in a v1 manifest. Convert the old crop rectangle into the quarter-turned full-image coordinate system, then upgrade to v5. This gives the same output for the supported v1 operations; never silently change a crop or drop an effect. V2 keeps its geometry and global adjustment semantics, with an empty local region and zero local exposure. Legacy versions cannot contain local operations or mask resources. V3 regions and local exposure are preserved while softening remains zero. Versions below v4 reject nonneutral softening parameters. V4 strokes, local exposure, softening and detail protection retain their numerical semantics. New current projects save as v5. Older apps must reject v5 rather than silently drop base coverage. Versions below v5 cannot contain base coverage, including in the external mask resource.
+Read the v1 `srgb-tone-crop-turn-v1` pipeline with its original source-coordinate crop, exposure, saturation and turns. All v2-only controls must be neutral in a v1 manifest. Convert the old crop rectangle into the quarter-turned full-image coordinate system, then upgrade to v6. This gives the same output for the supported v1 operations; never silently change a crop or drop an effect. V2 keeps its geometry and global adjustment semantics, with an empty local region and zero local exposure. Legacy versions cannot contain local operations or mask resources. V3 regions and local exposure are preserved while softening remains zero. Versions below v4 reject nonneutral softening parameters. V4 strokes, local exposure, softening and detail protection retain their numerical semantics. New current projects save as v6. V5 base coverage and all existing effects retain their values. Older apps must reject v6 rather than silently reinterpret newly accepted sources. Versions below v5 cannot contain base coverage, including in the external mask resource.
 
 ## Local persistence boundary
 
@@ -72,7 +72,7 @@ System document providers do not guarantee atomic replacement. Keep a valid priv
 
 The v4 operation schema and full-resolution pixel contract are unchanged. Resource bounds are now 100,000,000 pixels, 32,768 pixels per edge and 64 MiB for the encoded source; older v4 readers may reject larger resources. The UI uses original-resolution dimensions even when the decoder returns a sampled bitmap. Memory admission may refuse an operation below these format limits; refusal must preserve the saved project and must not silently reduce the selected export size. See [large-image handling](large-images.md).
 
-## Read-only detail inspection in 0.6
+## Detail inspection in 0.6
 
 No new fields or processing version are introduced. The inspector retains original-pixel scale and uses a bounded source region with neighborhood and JPEG decoder halos. It shares color stages with full rendering and uses whole-output coordinates for vignette. Canvas rasterization of a translated subregion can have small interpolation-rounding differences from rendering the whole image. Inspector position, comparison state and pixels are transient; inspecting a tool draft never commits or saves it.
 
@@ -81,3 +81,7 @@ No new fields or processing version are introduced. The inspector retains origin
 `assets/local-mask.json` contains `strokes` and optional `base` (null for a manual-only region). A base contains integer `width`/`height` in 1–256 and `hex`: exactly `width*height*2` lowercase hexadecimal characters, row-major unsigned 8-bit coverage. The whole grid spans the EXIF-normalized source rectangle; no screen or crop coordinates are stored. An empty stroke list with a base is still a nonempty region. The existing 512 KiB mask resource limit and integrity digest apply to the entire JSON, including strokes.
 
 Decode the base, bilinearly sample at the centers of the existing long-edge-1024 working coverage grid, then replay add/erase strokes using the v3 union/subtraction rules. Without a base the starting grid remains zero. Region replacement replaces both base and strokes as one undoable edit; manual correction retains the base. Preview, export and detail inspection consume the same saved coverage data and never rerun a model. A later model change does not change old projects. The generator uses at most 256 pixels on its longest side, but readers accept any bounded width/height pair; normalized sampling defines its meaning.
+
+## V6 input interpretation
+
+V6 / `srgb-import-v6` changes the source-decoding contract, with one new manifest flag and no mask changes. `honorExifColorSpace` defaults to false for old archives and is true for new imports. It controls only the unprofiled Adobe RGB EXIF fallback; embedded profile conversion is unchanged. This preserves how earlier editors interpreted already accepted untagged JPEGs, including those whose EXIF hints they ignored. Editing or exporting a legacy project retains false; import its original as a new photo to adopt the new EXIF interpretation. Original bytes and hashes remain unchanged. V1–v5 migrate their parameters into v6; previously accepted sRGB JPEG/PNG keep their rendering semantics. Common source RGB profiles, EXIF Adobe RGB, 16-bit PNG and new codecs enter the same existing 8-bit sRGB effect pipeline. Standalone HDR transfer functions, transparency and unavailable codecs are refused. Wide-gamut colors outside sRGB may clip and precision is reduced. HEIF/AVIF detail decoding can require whole-frame codec memory. No new HDR output or Windows decoder is implied.

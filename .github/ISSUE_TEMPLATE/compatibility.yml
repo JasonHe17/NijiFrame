@@ -1,0 +1,39 @@
+name: 手机／照片兼容问题
+description: 报告照片导入、显示、保存或设备兼容问题；无需上传私人照片。
+body:
+  - type: markdown
+    attributes:
+      value: |
+        此处提交的内容会公开。请勿附私人照片、GPS、序列号、账号或未经检查的完整系统日志。
+        无需上传照片；先提供下列文字信息即可。未知字段请填“不确定”。
+  - type: input
+    id: app-version
+    attributes:
+      label: 应用版本与构建号
+      description: 可从“关于”复制版本与源码提交号。
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: 运行设备与系统版本
+      description: 手机型号、Android 版本、厂商系统版本；不要提供序列号或 IMEI。
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 操作、预期与实际结果
+      description: 在哪一步失败？请提供提示文字，以及是否所有照片都出现。
+    validations:
+      required: true
+  - type: textarea
+    id: photo
+    attributes:
+      label: 照片信息（可选）
+      description: 扩展名、尺寸、文件大小、拍摄设备、相机模式、是否经聊天软件或相册转存；不确定就注明，不必上传原件。
+  - type: textarea
+    id: recovery
+    attributes:
+      label: 对已有工程的影响（可选）
+      description: 失败后原工程能否重开？换普通 JPEG 或选择较小导出尺寸是否成功？不要为了填写而重复压力测试。

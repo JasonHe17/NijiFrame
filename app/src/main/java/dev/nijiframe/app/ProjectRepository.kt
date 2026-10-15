@@ -39,6 +39,7 @@ class ProjectRepository(private val context: Context,
             }
         }
         val info = ImagePipeline.inspect(bytes)
+        requireCodecMemory(info)
         val bitmap = ImagePipeline.decode(bytes, ImageSizing.previewSample(info.width, info.height), info)
         val name = runCatching { resolver.query(uri,arrayOf(OpenableColumns.DISPLAY_NAME),null,null,null)?.use {
             if (it.moveToFirst()) it.getString(0) else null
@@ -53,10 +54,14 @@ class ProjectRepository(private val context: Context,
     fun read(id: String): Pair<Project,Bitmap> = decode(library.read(id))
     fun restore(): Pair<Project,Bitmap> = read(requireNotNull(library.latest()) { "还没有保存的工程，请先导入照片" })
     private fun decode(project: Project): Pair<Project, Bitmap> {
-        val info = ImagePipeline.inspect(project.original)
+        val info = ImagePipeline.inspect(project.original,project.manifest.honorExifColorSpace)
         require(info.width == project.manifest.width && info.height == project.manifest.height) { "工程尺寸与原图不一致" }
+        requireCodecMemory(info)
         val bitmap = ImagePipeline.decode(project.original, ImageSizing.previewSample(info.width, info.height), info)
         return project to bitmap
+    }
+    private fun requireCodecMemory(info: ImagePipeline.ImageInfo) {
+        if(info.codecHeadroom>0) require(info.codecHeadroom+32L*1024*1024<=availableMemory()) {"此 HEIF/AVIF 照片解码需要更多内存，请使用较小照片或由相册导出 JPEG；原文件未改变"}
     }
     fun thumbnail(id: String): File {
         require(id.matches(Regex("[0-9a-f-]{36}")))
@@ -79,7 +84,8 @@ class ProjectRepository(private val context: Context,
         val m = project.manifest
         val sample = ImageSizing.exportSample(m, settings)
         val reusable = source.width == m.width && source.height == m.height && sample == 1
-        val required = ImageSizing.exportWorkingBytes(m, sample, reusable, settings.maxEdge != null)
+        val required = ImageSizing.exportWorkingBytes(m, sample, reusable, settings.maxEdge != null) +
+            (if(reusable) 0 else ImagePipeline.inspect(project.original,project.manifest.honorExifColorSpace).codecHeadroom)
         if (required > availableMemory()) {
             // Previous projects/previews can be unreachable but not collected yet. Recheck once before refusal.
             // This runs on a worker, and never raises the budget or substitutes a lower resolution.
@@ -95,7 +101,7 @@ class ProjectRepository(private val context: Context,
         val context = currentCoroutineContext()
         context.ensureActive()
         val reusable = source.width == m.width && source.height == m.height && sample == 1
-        val input = if (reusable) source else ImagePipeline.decode(project.original, sample, check = { context.ensureActive() })
+        val input = if (reusable) source else ImagePipeline.decode(project.original, sample, info=ImagePipeline.inspect(project.original,m.honorExifColorSpace), check = { context.ensureActive() })
         try {
             val edit = ImagePipeline.scaledEdit(m.edit, m.width, m.height, input.width, input.height)
             var rendered = ImagePipeline.render(input, edit)

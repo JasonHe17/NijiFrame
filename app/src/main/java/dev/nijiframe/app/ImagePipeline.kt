@@ -5,65 +5,41 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.BitmapRegionDecoder
 import android.graphics.Rect
-import android.graphics.ColorSpace
 import android.graphics.Matrix
 import android.graphics.Canvas
 import android.graphics.Paint
 import dev.nijiframe.editor.*
-import android.os.Build
-import androidx.exifinterface.media.ExifInterface
 import dev.nijiframe.editor.Edit
-import dev.nijiframe.editor.Manifest
 import dev.nijiframe.image.NativeTone
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlin.math.roundToInt
 
 object ImagePipeline {
-    data class ImageInfo(val encodedWidth: Int, val encodedHeight: Int, val orientation: Int, val mime: String) {
+    data class ImageInfo(val encodedWidth: Int, val encodedHeight: Int, val orientation: Int, val mime: String,
+        val colorName: String="sRGB", val assumeAdobeRgb: Boolean=false, val gainmapHint: Boolean=false) {
         val width get() = if (orientation in 5..8) encodedHeight else encodedWidth
         val height get() = if (orientation in 5..8) encodedWidth else encodedHeight
+        val notice get() = "${mime.substringAfter('/').uppercase()} · $colorName → sRGB / SDR"+
+            (if(gainmapHint) "（HDR 使用 SDR 底图）" else "")+"；原文件保留"+
+            (if(android.os.Build.VERSION.SDK_INT<=32 && mime in setOf("image/heif","image/heic","image/avif"))
+                "。此系统的 HEIF/AVIF 解码可能有色偏，建议先由相册导出 JPEG" else "")
+        // These platform codecs may need whole-frame scratch even for a sampled or cropped result.
+        val codecHeadroom get() = if(mime in setOf("image/avif","image/heif","image/heic")) width.toLong()*height*8 else 0L
     }
 
-    fun inspect(bytes: ByteArray): ImageInfo {
-        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
-        require(bounds.outMimeType in setOf("image/jpeg", "image/png")) { "目前仅支持 JPEG 和不透明 PNG" }
-        require(bounds.outWidth in 1..Manifest.MAX_EDGE && bounds.outHeight in 1..Manifest.MAX_EDGE &&
-            bounds.outWidth.toLong() * bounds.outHeight <= Manifest.MAX_PIXELS) {
-            "图片超过当前 1 亿像素或单边 32768 像素限制"
-        }
-        require(bounds.outColorSpace == null || bounds.outColorSpace == ColorSpace.get(ColorSpace.Named.SRGB)) {
-            "目前仅支持 sRGB 图片，请先转换色彩空间"
-        }
-        if (bounds.outMimeType == "image/png") {
-            require(bytes.size > 25 && bytes[24].toInt() == 8) { "目前仅支持 8 位 PNG" }
-        }
-        val exif = ExifInterface(bytes.inputStream())
-        val xmp = exif.getAttribute(ExifInterface.TAG_XMP).orEmpty()
-        require(!xmp.contains("hdrgm:", ignoreCase = true) && !xmp.contains("hdrgainmap", ignoreCase = true)) {
-            "目前不支持 HDR 增益图，请先导出 SDR 图片"
-        }
-        return ImageInfo(bounds.outWidth, bounds.outHeight,
-            exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL), bounds.outMimeType!!)
-    }
+    fun inspect(bytes: ByteArray,honorExifColorSpace: Boolean=true): ImageInfo = PhotoInput.inspect(bytes,honorExifColorSpace)
 
     fun decode(bytes: ByteArray, sample: Int = 1, info: ImageInfo = inspect(bytes), check: () -> Unit = {}): Bitmap {
         require(sample > 0 && sample and (sample - 1) == 0)
         check()
-        // Subsampling can hide an isolated transparent pixel. Validate the original PNG in bounded regions.
         if (sample > 1 && info.mime == "image/png" && pngMayHaveAlpha(bytes)) validateOpaquePng(bytes, info, check)
-        val bitmap = requireNotNull(BitmapFactory.decodeByteArray(bytes, 0, bytes.size,
-            BitmapFactory.Options().apply { inSampleSize = sample; inPreferredConfig = Bitmap.Config.ARGB_8888;
-                inPreferredColorSpace = ColorSpace.get(ColorSpace.Named.SRGB) })) { "无法解码图片" }
+        val decoded=requireNotNull(BitmapFactory.decodeByteArray(bytes,0,bytes.size,PhotoInput.options(sample))) {"此设备无法解码这张照片，请尝试相机或相册导出的 JPEG"}
+        val bitmap=PhotoInput.toWorking(decoded,info)
         try {
-            require(Build.VERSION.SDK_INT < 34 || !bitmap.hasGainmap()) { "目前不支持 HDR 图片" }
-            val row = IntArray(bitmap.width)
-            for (y in 0 until if (info.mime == "image/png" && sample == 1) bitmap.height else 0) {
-                check()
-                bitmap.getPixels(row, 0, bitmap.width, 0, y, bitmap.width, 1)
-                require(row.all { (it ushr 24) == 255 }) { "目前不支持含透明像素的图片" }
-            }
+            if(sample>1 && bitmap.hasAlpha() && info.mime !in setOf("image/jpeg","image/png"))
+                PhotoInput.validateOpaque(bytes,info,check)
+            PhotoInput.requireOpaque(bitmap,check)
             val transform = orientationMatrix(info.orientation)
             val normalized = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, transform, false)
             if (normalized !== bitmap) bitmap.recycle()

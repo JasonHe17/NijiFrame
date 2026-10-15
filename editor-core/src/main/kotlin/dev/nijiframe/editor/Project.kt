@@ -35,8 +35,8 @@ data class Edit(val exposureEv: Float = 0f, val saturation: Float = 1f,
 
 @Serializable
 data class Manifest(
-    val version: Int = 5,
-    val pipeline: String = "srgb-region-v5",
+    val version: Int = 6,
+    val pipeline: String = "srgb-import-v6",
     val source: String = "assets/original",
     val sourceBytes: Int,
     val sourceSha256: String,
@@ -44,14 +44,17 @@ data class Manifest(
     val height: Int,
     val edit: Edit = Edit(),
     val name: String = "Untitled",
-    val localMask: MaskResource? = null
+    val localMask: MaskResource? = null,
+    val honorExifColorSpace: Boolean = false
 ) {
     fun validate() {
         require((version == 1 && pipeline == "srgb-tone-crop-turn-v1") ||
             (version == 2 && pipeline == "srgb-basic-v2") ||
             (version == 3 && pipeline == "srgb-local-v3") ||
             (version == 4 && pipeline == "srgb-soften-v4") ||
-            (version == 5 && pipeline == "srgb-region-v5")) { "Unsupported project version or operation" }
+            (version == 5 && pipeline == "srgb-region-v5") ||
+            (version == 6 && pipeline == "srgb-import-v6")) { "Unsupported project version or operation" }
+        if(version < 6) require(!honorExifColorSpace) { "Legacy project cannot change EXIF color interpretation" }
         if(version < 5) require(edit.local.region.base == null) { "Legacy project cannot contain base coverage" }
         if(version < 4) require(edit.local.soften == 0f && edit.local.detailProtection == .75f) { "Legacy project cannot contain softening" }
         if(version < 3) require(edit.local == LocalAdjustment() && localMask == null) { "Legacy project cannot contain local adjustments" }
@@ -66,16 +69,18 @@ data class Manifest(
         require(width in 1..MAX_EDGE && height in 1..MAX_EDGE && width.toLong() * height <= MAX_PIXELS) { "Unsupported image dimensions" }
         edit.validate(width, height, sourceCrop = version == 1)
     }
-    fun current(): Manifest = copy(version = 5, pipeline = "srgb-region-v5",
+    fun current(): Manifest = copy(version = 6, pipeline = "srgb-import-v6",
         edit = if(version == 1) edit.copy(crop = edit.crop?.let { Geometry.legacyCrop(it,width,height,edit.turns) }) else edit)
     companion object {
-        const val MAX_PIXELS = 100_000_000L
+        // Include 200 MP-class dimensions such as 16384x12288 (201,326,592 pixels).
+        // Decode/export memory admission remains independent of this resource ceiling.
+        const val MAX_PIXELS = 210_000_000L
         const val MAX_EDGE = 32_768
     }
 }
 
 data class Project(val manifest: Manifest, val original: ByteArray) {
-    fun withEdit(edit: Edit): Project = copy(manifest = manifest.copy(version = 5, pipeline = "srgb-region-v5", edit = edit, localMask = null))
+    fun withEdit(edit: Edit): Project = copy(manifest = manifest.copy(version = 6, pipeline = "srgb-import-v6", edit = edit, localMask = null))
 }
 
 /** History contains parameters and immutable region descriptions, never rendered bitmaps. A completed gesture contributes one entry. */

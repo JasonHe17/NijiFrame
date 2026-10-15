@@ -1,0 +1,43 @@
+# Photo input and color handling
+
+JPEG is an encoding, while sRGB, Display P3 and Adobe RGB describe colors. A phone JPEG can contain a wide-gamut ICC profile and an HDR gainmap. The editor accepts common decoded RGB profiles and converts pixels into its **8-bit sRGB / SDR** working space. It does not merely replace the profile label. The encoded original, including its metadata and gainmap, remains byte-for-byte intact in the editable project.
+
+## Supported inputs
+
+| Input | Handling |
+| --- | --- |
+| JPEG / JPG | sRGB and common embedded RGB profiles, including Display P3 and Adobe RGB; EXIF orientation |
+| Ultra HDR JPEG with an SDR base | Edit the SDR base and detach the gainmap from working bitmaps; retain the complete original in the project |
+| PNG | Opaque 8-bit and 16-bit sources, reduced to the current 8-bit working space; embedded RGB profile conversion |
+| WebP | Opaque static images, including EXIF orientation; animated WebP is refused |
+| HEIC / HEIF | Primary still image through the device codec, Android 9+; available profiles and bit depths depend on that codec |
+| AVIF | Static image through the device codec, Android 12+; container rotation/mirroring applied once |
+| Camera exports | JPEG with embedded Adobe RGB ICC or an unprofiled JPEG explicitly marked Adobe RGB by EXIF ColorSpace=2 / interoperability index R03; opaque 16-bit PNG |
+
+HEIF/AVIF codec support is device-dependent. AOSP API 29/31 were observed to expand full-range HEVC as limited-range, changing known RGB colors even in both direct platform decoders; limited-range fixtures and API 36 do not show this failure. Android 9–12L HEIF/AVIF imports therefore show a visible color-shift notice recommending a gallery JPEG conversion. The failed full-range fixture remains in regression, and this platform color defect is not claimed fixed. API 31 shows the same range error with full-range AVIF; its original full-range fixtures remain in a separate known-limitation regression, while limited-range fixtures retain independent expected-color assertions. The tests exercise 8-bit SDR fixtures; optional high-bit-depth HEIF/AVIF decoding is not a universal device guarantee. JPEG/PNG exports use sRGB SDR and do not include an HDR gainmap. Wide-gamut colors outside sRGB may be clipped, and higher precision is reduced. This is input compatibility, not a wide-gamut or HDR editing/output pipeline.
+
+RAW/DNG/ProRAW, TIFF, independent HLG/PQ HDR, HDR-base gainmaps, transparent pixels and animated images are not supported. Explicit HDR transfer tags in PNG cICP and HEIF/AVIF NCLX/NCLC are refused, including on older systems without named HDR color spaces; a file with an HDR property on an auxiliary item is conservatively refused too. Common SDR-base Ultra HDR JPEG remains accepted. Unrecognized/custom ICC behavior is limited by the system decoder; support for arbitrary ICC LUT profiles is not claimed. Missing profiles default to sRGB except the explicit Adobe RGB EXIF case. An embedded JPEG ICC takes precedence over that EXIF fallback. New imports record `honorExifColorSpace=true`; old projects retain false, preserving their previous handling of unprofiled JPEGs. Reimport an original as a new photo to adopt the new EXIF interpretation.
+
+The picker accepts the advertised MIME types; file contents determine actual support. Corrupt or unavailable codecs produce an error without replacing the saved project. Limits are 210 MP, 64 MiB and 32,768 pixels per edge. No remote service, model download or new runtime codec library is involved. The [device survey and coverage plan](device-compatibility.md) separates manufacturer specifications from file, emulator and physical-device evidence.
+
+## Preview, detail and export
+
+All three paths use the same color conversion and SDR policy. Large-photo previews remain sampled, while the original bytes and coordinates stay intact. WebP and HEIF subset origins are aligned to even encoded pixels and trimmed before EXIF normalization; otherwise a cropped decode can shift relative to a full render. API 37 HEIF was observed to return a valid region shifted by one pixel on each odd-origin axis; even-origin decode followed by exact trimming matches full-frame pixels.
+
+HEIF region decoding can fail for otherwise valid subsets on a device. In that case the editor decodes the original frame and crops it. AVIF uses BitmapFactory for untransformed pixels and reads primary-item irot/imir associations to normalize direction exactly once. ImageDecoder ignored AVIF mirroring on tested API 31/34/35; EXIF rotation alone did not capture the container mirror. Original-resolution AVIF detail uses a full-frame decode/crop because BitmapRegionDecoder support is not universal. Both formats reserve conservative whole-frame codec headroom (8 bytes per original pixel plus ordinary operation budgets); they can be refused for memory even when an equally sized JPEG works. The returned detail window is still at most 768×768, but these codec paths do not promise bounded internal decoding buffers or low-memory detail inspection. No proxy is substituted for original-resolution detail.
+
+The editor shows its sRGB/SDR policy after opening a photo and in the export dialog. A photo export discards original metadata; exporting `.nijiproj` keeps the original resource. New or edited projects use **v6 / srgb-import-v6** so older editors cannot silently reinterpret new input semantics. V1–v5 projects can be read and retain their edits and originals. Back up portable projects before editing them with a newer version.
+
+## Verification and references
+
+`PhotoFormatTest` uses generated colors and codec fixtures, not private photographs. It checks P3/Adobe RGB JPEG/PNG, EXIF Adobe RGB, 16-bit PNG, sRGB/P3 Ultra HDR, sampled wide JPEG, HEIF/WebP orientation and all eight AVIF orientations, native detail versus full output, v6 portable round trips, original hashes, memory refusal and unsupported transfer/animation rejection. Old Android versions assert explicit AVIF refusal rather than pretending to decode it. Synthetic fixture provenance is in `app/src/androidTest/assets/formats/README.md`.
+
+Platform references: [supported formats](https://developer.android.com/media/platform/supported-formats), [BitmapFactory color options](https://developer.android.com/reference/android/graphics/BitmapFactory.Options#inPreferredColorSpace), [ImageDecoder](https://developer.android.com/reference/android/graphics/ImageDecoder), [Ultra HDR](https://developer.android.com/media/platform/hdr-image-format), [Gainmap](https://developer.android.com/reference/android/graphics/Gainmap). WebP subset behavior is documented in [Skia's codec implementation](https://skia.googlesource.com/skia/+/e7fc14b55bb8c41ba054abf0bfa09cdd6ec84671/src/codec/SkWebpCodec.cpp). Actual device/OS tests take precedence over assuming every documented codec path is available.
+
+## Patent and dependency notes
+
+[US12666158B2](https://patents.google.com/patent/US12666158B2/en), claims 1/12/18, covers combinations involving gainmap generation/embedding or display-capability/environment-dependent scaling and application. Production code here edits the existing SDR base; it neither generates gainmaps nor scales/applies them according to a display or environmental sensor. Test-only constant-color fixtures use the Android Gainmap/compressor API; that separate test workflow must not be described as an absence of all gainmap-related operations.
+
+[US8411106B2](https://patents.google.com/patent/US8411106B2/en), claims 1/12, describes gamut mapping using a boundary description from a separate image profile. The app requests the platform's sRGB conversion and uses its fixed Adobe RGB connector for the EXIF fallback, without constructing separate image-specific gamut boundary profiles. These are implementation differences, not a freedom-to-operate, current legal-status or codec patent-license conclusion. HEVC/HEIF and other platform codecs still require their own distribution/implementation assessment; using a system API or GPL source does not settle third-party rights.
+
+AVIF transform definitions follow [libavif metadata documentation](https://github.com/AOMediaCodec/libavif/blob/main/include/avif/avif.h); no libavif runtime code is bundled. The original full-range files remain unchanged. Existing v6 AVIF projects edited on systems that previously ignored mirroring may show corrected source orientation: check their crops and local regions before continuing, because an old manifest does not record which system decoder created it. This limitation does not apply to JPEG/PNG/HEIF orientation.

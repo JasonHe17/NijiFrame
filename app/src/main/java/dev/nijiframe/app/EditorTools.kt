@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 package dev.nijiframe.app
 
+import androidx.compose.foundation.systemGestureExclusion
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -76,7 +77,7 @@ internal fun ToolPanel(ui: EditorUi, editor: EditorViewModel, modifier: Modifier
                         }
                         Text("校正 ${String.format(Locale.ROOT,"%.1f°",draft.straighten)}",style=MaterialTheme.typography.labelLarge)
                         Slider(value=draft.straighten,onValueChange={editor.updateDraft(draft.copy(straighten=it))},valueRange=-45f..45f,
-                            modifier=Modifier.semantics {contentDescription="校正角度"})
+                            modifier=Modifier.systemGestureExclusion().semantics {contentDescription="校正角度"})
                         TextButton(onClick={editor.updateDraft(draft.copy(straighten=0f))}) {Text("校正归零")}
                     }
                     EditorTool.LOOKS -> {
@@ -112,7 +113,7 @@ private fun AdjustmentPanel(edit: Edit, editor: EditorViewModel, choices: List<A
         TextButton(onClick={editor.updateDraft(adjustment.set(edit,adjustment.get(Edit())))}) {Text("归零")}
     }
     Slider(value=adjustment.get(edit),onValueChange={editor.updateDraft(adjustment.set(edit,it))},valueRange=adjustment.range,
-        modifier=Modifier.semantics {contentDescription="${adjustment.label}调整"})
+        modifier=Modifier.systemGestureExclusion().semantics {contentDescription="${adjustment.label}调整"})
 }
 
 @Composable
@@ -137,31 +138,32 @@ private fun LocalPanel(ui: EditorUi, editor: EditorViewModel, draft: Edit) {
         "柔肤（实验）" -> {
             Text(String.format(Locale.ROOT,"柔肤强度 %.0f%% · %s",draft.local.soften*100,
                 if(draft.local.region.isEmpty) "请先涂选区域" else "实验效果，留意纹理"),style=MaterialTheme.typography.labelMedium)
+            // Edge drags belong to this slider, not gesture navigation's Back action.
             Slider(value=draft.local.soften,onValueChange={editor.updateDraft(draft.copy(local=draft.local.copy(soften=it)))},
                 onValueChangeFinished=editor::localCheckpoint,valueRange=0f..1f,
-                modifier=Modifier.semantics {contentDescription="柔肤强度调整"})
+                modifier=Modifier.systemGestureExclusion().semantics {contentDescription="柔肤强度调整"})
         }
         "细节保护" -> {
             Text(String.format(Locale.ROOT,"细节保护 %.0f%% · 越高越保留局部变化",draft.local.detailProtection*100),style=MaterialTheme.typography.labelMedium)
             Slider(value=draft.local.detailProtection,onValueChange={editor.updateDraft(draft.copy(local=draft.local.copy(detailProtection=it)))},
                 onValueChangeFinished=editor::localCheckpoint,valueRange=0f..1f,
-                modifier=Modifier.semantics {contentDescription="柔肤细节保护"})
+                modifier=Modifier.systemGestureExclusion().semantics {contentDescription="柔肤细节保护"})
         }
         "笔刷大小" -> {
             Text("直径 ${String.format(Locale.ROOT,"%.1f%%",ui.brushRadius*200)} · 相对原图短边",style=MaterialTheme.typography.labelMedium)
             Slider(value=ui.brushRadius,onValueChange=editor::brushRadius,valueRange=.005f.. .25f,
-                modifier=Modifier.semantics {contentDescription="区域笔刷大小"})
+                modifier=Modifier.systemGestureExclusion().semantics {contentDescription="区域笔刷大小"})
         }
         "边缘硬度" -> {
             Text(String.format(Locale.ROOT,"%.0f%%",ui.brushHardness*100),style=MaterialTheme.typography.labelMedium)
             Slider(value=ui.brushHardness,onValueChange=editor::brushHardness,valueRange=0f..1f,
-                modifier=Modifier.semantics {contentDescription="区域边缘硬度"})
+                modifier=Modifier.systemGestureExclusion().semantics {contentDescription="区域边缘硬度"})
         }
         else -> {
             Text(String.format(Locale.ROOT,"%.2f EV · 仅影响涂选区域",draft.local.exposureEv),style=MaterialTheme.typography.labelMedium)
             Slider(value=draft.local.exposureEv,onValueChange={editor.updateDraft(draft.copy(local=draft.local.copy(exposureEv=it)))},
                 onValueChangeFinished=editor::localCheckpoint,valueRange=-3f..3f,
-                modifier=Modifier.semantics {contentDescription="局部曝光调整"})
+                modifier=Modifier.systemGestureExclusion().semantics {contentDescription="局部曝光调整"})
         }
     }
 }

@@ -9,6 +9,15 @@ import org.junit.Test
 
 class BaseCoverageTest {
     private val base=BaseCoverage(2,2,"ff800040")
+    @Test fun v5MigratesInputPolicyWithoutChangingSourceOrEdits() {
+        val edit=Edit(turns=1,local=LocalAdjustment(.5f,Region(base=base),.3f))
+        val current=ProjectIO.create(byteArrayOf(1,2,3),100,80).withEdit(edit)
+        val legacy=current.copy(manifest=current.manifest.copy(version=5,honorExifColorSpace=false,pipeline="srgb-region-v5"))
+        val encoded=ByteArrayOutputStream().also {ProjectIO.write(legacy,it)}.toByteArray()
+        val loaded=ProjectIO.read(encoded.inputStream())
+        assertEquals(6,loaded.manifest.version);assertEquals("srgb-import-v6",loaded.manifest.pipeline)
+        assertEquals(edit,loaded.manifest.edit);assertArrayEquals(legacy.original,loaded.original)
+    }
     @Test fun baseThenManualCorrectionRoundTripsAndCanBeUndone() {
         val original=Region(base=base)
         val stroke=MaskStroke(listOf(MaskPoint(.25f,.25f)),.1f,1f,true)
@@ -20,7 +29,7 @@ class BaseCoverageTest {
         val project=ProjectIO.create(byteArrayOf(1,2,3),100,100).withEdit(edit)
         val encoded=ByteArrayOutputStream().also {ProjectIO.write(project,it)}.toByteArray()
         val reopened=ProjectIO.read(encoded.inputStream())
-        assertEquals(5,reopened.manifest.version);assertEquals(edit,reopened.manifest.edit)
+        assertEquals(6,reopened.manifest.version);assertEquals(edit,reopened.manifest.edit)
         assertArrayEquals(project.original,reopened.original)
         assertArrayEquals(raster.coverage,MaskRaster.create(reopened.manifest.edit.local.region,100,100).coverage)
         val history=History(Edit(local=LocalAdjustment(region=original)))
@@ -53,6 +62,6 @@ class BaseCoverageTest {
             }
         }}.toByteArray()
         val migrated=ProjectIO.read(bytes.inputStream())
-        assertEquals(p.manifest,migrated.manifest);assertArrayEquals(p.original,migrated.original)
+        assertEquals(p.manifest.copy(honorExifColorSpace=false),migrated.manifest);assertArrayEquals(p.original,migrated.original)
     }
 }

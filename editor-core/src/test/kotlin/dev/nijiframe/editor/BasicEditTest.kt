@@ -20,13 +20,13 @@ class BasicEditTest {
             }
         }}.toByteArray()
         val result = ProjectIO.read(bytes.inputStream())
-        assertEquals(5, result.manifest.version)
+        assertEquals(6, result.manifest.version)
         assertEquals(Edit(1f,0.5f,1), result.manifest.edit)
         assertArrayEquals(source, result.original)
     }
     @Test fun legacyNonSquareCropMovesIntoRotatedCoordinates() {
         val original=ProjectIO.create(byteArrayOf(1),40,20)
-        val legacy=original.copy(manifest=original.manifest.copy(version=1,pipeline="srgb-tone-crop-turn-v1",
+        val legacy=original.copy(manifest=original.manifest.copy(version=1,honorExifColorSpace=false,pipeline="srgb-tone-crop-turn-v1",
             edit=Edit(turns=1,crop=Crop(10,0,30,20))))
         val bytes=ByteArrayOutputStream().also {ProjectIO.write(legacy,it)}.toByteArray()
         val current=ProjectIO.read(bytes.inputStream())

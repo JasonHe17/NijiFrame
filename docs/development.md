@@ -16,6 +16,8 @@ cd NijiFrame
 ```sh
 sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'ndk;28.2.13676358' 'cmake;3.22.1'
 ./gradlew :editor-core:test :app:assembleDebug :app:lintDebug
+"$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 4 app/build/outputs/apk/debug/app-debug.apk
+python3 scripts/check-apk-native.py app/build/outputs/apk/debug/app-debug.apk
 ```
 
 APK：`app/build/outputs/apk/debug/app-debug.apk`，包含 arm64-v8a 和 x86_64。配置最低 API 26，实际验证范围单独记录，不以配置代替设备验证。
@@ -35,7 +37,7 @@ cmake --build build/native
 ctest --test-dir build/native --output-on-failure
 ```
 
-[GitHub Actions](https://github.com/JasonHe17/NijiFrame/actions/workflows/android.yml) 执行构建、Lint、JVM/native 检查和 API 29／36 模拟器测试，保留报告与开发 APK。应查看具体提交的运行结果；历史失败不会被描述为通过。物理手机与 Windows 尚未验证。
+[GitHub Actions](https://github.com/JasonHe17/NijiFrame/actions/workflows/android.yml) 执行构建、Lint、JVM/native 检查和 API 29／31／34／36／37.0 模拟器测试及 API 35 的 16 KiB 页测试，保留报告与开发 APK。应查看具体提交的运行结果；历史失败不会被描述为通过。物理手机与 Windows 尚未验证。
 
 
 ## 模块导航

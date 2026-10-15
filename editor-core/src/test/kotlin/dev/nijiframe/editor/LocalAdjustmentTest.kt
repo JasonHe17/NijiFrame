@@ -18,10 +18,10 @@ class LocalAdjustmentTest {
         assertEquals(listOf("project.json","assets/original","assets/local-mask.json"),entries)
         val loaded=ProjectIO.read(bytes.inputStream())
         assertEquals(p.manifest,loaded.manifest);assertArrayEquals(p.original,loaded.original)
-        val old=p.copy(manifest=p.manifest.copy(version=2,pipeline="srgb-basic-v2",edit=Edit(exposureEv=.4f)))
+        val old=p.copy(manifest=p.manifest.copy(version=2,honorExifColorSpace=false,pipeline="srgb-basic-v2",edit=Edit(exposureEv=.4f)))
         val migrated=ProjectIO.read(archive(old).inputStream())
-        assertEquals(5,migrated.manifest.version);assertEquals(old.manifest.edit,migrated.manifest.edit)
-        assertThrows(IllegalArgumentException::class.java){p.manifest.copy(version=2,pipeline="srgb-basic-v2").validate()}
+        assertEquals(6,migrated.manifest.version);assertEquals(old.manifest.edit,migrated.manifest.edit)
+        assertThrows(IllegalArgumentException::class.java){p.manifest.copy(version=2,honorExifColorSpace=false,pipeline="srgb-basic-v2").validate()}
     }
     @Test fun missingCorruptAndUnexpectedMaskAreRejected() {
         val p=ProjectIO.create(byteArrayOf(1),400,200).withEdit(Edit(local=LocalAdjustment(1f,Region(listOf(stroke)))))

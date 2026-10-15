@@ -64,14 +64,14 @@ internal object DetailRenderer {
             Rect(floor(box.left).toInt()-2,floor(box.top).toInt()-2,ceil(box.right).toInt()+2,ceil(box.bottom).toInt()+2)
         }
         val radius=if(edit.local.soften>0f) (min(m.width,m.height)/600f).roundToInt().coerceIn(1,6) else 0
-        val info=ImagePipeline.inspect(project.original)
+        val info=ImagePipeline.inspect(project.original,project.manifest.honorExifColorSpace)
         require(info.width==m.width && info.height==m.height) {"工程尺寸与原图不一致"}
         // JPEG chroma interpolation also needs neighbors beyond the requested region, even with neutral effects.
         val sourceRect=expand(sourceBounds,radius+if(info.mime=="image/jpeg") 16 else 0,m.width,m.height)
         require(sourceRect.width()>0 && sourceRect.height()>0 && sourceRect.width().toLong()*sourceRect.height()<=2_000_000) {
             "此区域暂时无法查看细节，请选择其他位置"
         }
-        val decoded=decodeRegion(project.original,info,sourceRect)
+        val decoded=PhotoInput.decodeRegion(project.original,info,sourceRect)
         var output: Bitmap?=null
         try {
             context.ensureActive()
@@ -129,32 +129,4 @@ internal object DetailRenderer {
         (rect.left-halo).coerceIn(0,width),(rect.top-halo).coerceIn(0,height),
         (rect.right+halo).coerceIn(0,width),(rect.bottom+halo).coerceIn(0,height))
 
-    @Suppress("DEPRECATION")
-    private fun decodeRegion(bytes: ByteArray, info: ImagePipeline.ImageInfo, rect: Rect): Bitmap {
-        val w=info.encodedWidth;val h=info.encodedHeight
-        val l=rect.left;val t=rect.top;val r=rect.right;val b=rect.bottom
-        val encoded=when(info.orientation) {
-            2 -> Rect(w-r,t,w-l,b)
-            3 -> Rect(w-r,h-b,w-l,h-t)
-            4 -> Rect(l,h-b,r,h-t)
-            5 -> Rect(t,l,b,r)
-            6 -> Rect(t,h-r,b,h-l)
-            7 -> Rect(w-b,h-r,w-t,h-l)
-            8 -> Rect(w-b,l,w-t,r)
-            else -> Rect(rect)
-        }
-        val decoder=requireNotNull(BitmapRegionDecoder.newInstance(bytes,0,bytes.size,false)) {"此图片暂不支持局部细节解码"}
-        try {
-            val bitmap=requireNotNull(decoder.decodeRegion(encoded,BitmapFactory.Options().apply {
-                inPreferredConfig=Bitmap.Config.ARGB_8888
-                inPreferredColorSpace=ColorSpace.get(ColorSpace.Named.SRGB)
-            })) {"无法读取原图细节"}
-            try {
-                val matrix=ImagePipeline.orientationMatrix(info.orientation)
-                val normalized=Bitmap.createBitmap(bitmap,0,0,bitmap.width,bitmap.height,matrix,false)
-                if(normalized!==bitmap) bitmap.recycle()
-                return normalized
-            } catch(error: Throwable) {bitmap.recycle();throw error}
-        } finally {decoder.recycle()}
-    }
 }
