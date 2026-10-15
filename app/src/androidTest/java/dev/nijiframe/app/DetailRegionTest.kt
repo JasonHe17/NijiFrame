@@ -103,6 +103,24 @@ class DetailRegionTest {
         }
         fun tap(label: String) {await {actionable(label)!=null};requireNotNull(actionable(label)).click();device.waitForIdle()}
         fun ready(count: Int) {await {desc("细节区域画布").exists() && text("细节区域 · $count 笔").exists()}}
+        fun nativeFrame(canvas: Rect): Rect {
+            // API 29 can report a clipped accessibility rectangle. Locate the actual pixels
+            // instead of assuming that rectangle and the native frame have the same center.
+            val file=File(context.cacheDir,"detail-brush-screen.png")
+            assertTrue(device.takeScreenshot(file))
+            val screen=BitmapFactory.decodeFile(file.path)
+            try {
+                fun selected(x: Int,y: Int): Boolean {
+                    val color=screen.getPixel(x,y)
+                    return Color.red(color)>80 && Color.red(color)>Color.green(color)+25
+                }
+                val xs=(canvas.left until canvas.right).filter {selected(it,canvas.centerY())}
+                val ys=(canvas.top until canvas.bottom).filter {selected(canvas.centerX(),it)}
+                val frame=Rect(xs.first(),ys.first(),xs.last()+1,ys.last()+1)
+                assertEquals(360,frame.width());assertEquals(520,frame.height())
+                return frame
+            } finally {screen.recycle();file.delete()}
+        }
         val library=ProjectLibrary(File(context.filesDir,"library"));val previous=library.latest()
         val source=Bitmap.createBitmap(600,400,Bitmap.Config.ARGB_8888).apply {eraseColor(Color.rgb(100,100,100))}
         val original=ByteArrayOutputStream().also {source.compress(Bitmap.CompressFormat.PNG,100,it)}.toByteArray()
@@ -130,9 +148,10 @@ class DetailRegionTest {
             assertEquals(initial,library.read(id).manifest.edit)
             tap("局部");tap("查看细节");ready(0);tap("细节擦除")
             canvas=desc("细节区域画布").visibleBounds
-            device.click(canvas.centerX()+30,canvas.centerY()-20);device.waitForIdle();ready(1)
+            val frameBounds=nativeFrame(canvas)
+            device.click(frameBounds.left+210,frameBounds.top+240);device.waitForIdle();ready(1)
             tap("细节添加")
-            device.click(canvas.centerX()-70,canvas.centerY()+60);device.waitForIdle();ready(2)
+            device.click(frameBounds.left+110,frameBounds.top+320);device.waitForIdle();ready(2)
             scenario.recreate();ready(2)
             device.setOrientationLeft()
             await {device.displayWidth>device.displayHeight && desc("细节区域画布").exists()}
@@ -146,8 +165,8 @@ class DetailRegionTest {
             val strokes=saved.manifest.edit.local.region.strokes
             assertTrue(strokes[0].erase);assertFalse(strokes[1].erase)
             val expected=requireNotNull(SourceGeometry(600,400,initial).toSource(210f,240f))
-            assertEquals(expected.x,strokes[0].points.first().x,.003f)
-            assertEquals(expected.y,strokes[0].points.first().y,.003f)
+            assertEquals("Inverse-mapped source X",expected.x,strokes[0].points.first().x,.003f)
+            assertEquals("Inverse-mapped source Y",expected.y,strokes[0].points.first().y,.003f)
             val repository=ProjectRepository(context,root)
             val portable=File(root,"corrected.nijiproj")
             repository.exportProject(saved,Uri.fromFile(portable))
@@ -166,9 +185,15 @@ class DetailRegionTest {
                 } finally {result.recycle();frame.bitmap.recycle()}
             } finally {decoded.recycle()}
         } catch(error: Throwable) {
-            device.executeShellCommand("mkdir -p /sdcard/Download/nijiframe-test-evidence")
-            device.dumpWindowHierarchy(File("/sdcard/Download/nijiframe-test-evidence/detail-brush-failure.xml"))
-            device.takeScreenshot(File("/sdcard/Download/nijiframe-test-evidence/detail-brush-failure.png"))
+            // App UID cannot write directly to arbitrary Downloads paths on every supported API.
+            // A secondary evidence failure must never replace the assertion that caused it.
+            android.util.Log.e("DetailRegionTest","Detail correction assertion failed",error)
+            runCatching {
+                device.executeShellCommand("mkdir -p /sdcard/Download/nijiframe-test-evidence")
+                device.dumpWindowHierarchy(File(context.cacheDir,"detail-brush-failure.xml"))
+                device.executeShellCommand("sh -c 'run-as dev.nijiframe.app cat cache/detail-brush-failure.xml > /sdcard/Download/nijiframe-test-evidence/detail-brush-failure.xml'")
+                device.executeShellCommand("screencap -p /sdcard/Download/nijiframe-test-evidence/detail-brush-failure.png")
+            }.onFailure {error.addSuppressed(it)}
             throw error
         } finally {
             device.setOrientationNatural();device.unfreezeRotation()
