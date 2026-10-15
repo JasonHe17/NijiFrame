@@ -94,18 +94,7 @@ class LocalEditingTest {
         val device=UiDevice.getInstance(instrumentation)
         fun fresh() {if(android.os.Build.VERSION.SDK_INT>=34) instrumentation.uiAutomation.clearCache()}
         fun find(text: String): UiObject {fresh();return device.findObject(UiSelector().text(text)).also {check(it.waitForExists(10000)){"Missing $text"}}}
-        fun tap(text: String) {
-            // Rendering can replace the action node between discovery and injection.
-            // Retry only a missing node; keep the real click and its resulting assertions.
-            val deadline=System.currentTimeMillis()+10000
-            while(true) {
-                try {find(text).click();device.waitForIdle();fresh();return}
-                catch(error: androidx.test.uiautomator.UiObjectNotFoundException) {
-                    if(System.currentTimeMillis()>=deadline) throw error
-                    fresh();Thread.sleep(100)
-                }
-            }
-        }
+        fun tap(text: String) {find(text).click();device.waitForIdle();fresh()}
         fun desc(label: String): UiObject {fresh();return device.findObject(UiSelector().description(label))}
         fun await(check: ()->Boolean) {val end=System.currentTimeMillis()+20000;while(System.currentTimeMillis()<end){if(runCatching(check).getOrDefault(false))return;Thread.sleep(100)};assertTrue(check())}
         fun scrollTo(label: String) {
@@ -166,8 +155,23 @@ class LocalEditingTest {
             tap("项目");tap("Local test")
             await {desc("编辑预览").exists()}
             assertEquals(saved,library.read(id).manifest.edit)
+            if(device.executeShellCommand("settings get secure navigation_mode").trim()=="2") {
+                // Slider exclusion must leave Back available elsewhere on the screen edge.
+                tap("局部")
+                val edgeY=desc("局部区域画布").visibleBounds.centerY()
+                device.swipe(1,edgeY,device.displayWidth/4,edgeY,20)
+                find("当前工具还有未完成的调整")
+                tap("放弃本次调整")
+                assertEquals(saved,library.read(id).manifest.edit)
+            }
             device.executeShellCommand("mkdir -p /sdcard/Download/nijiframe-test-evidence")
             device.executeShellCommand("screencap -p /sdcard/Download/nijiframe-test-evidence/local-editor.png")
+        } catch(error: Throwable) {
+            device.executeShellCommand("mkdir -p /sdcard/Download/nijiframe-test-evidence")
+            device.executeShellCommand("screencap -p /sdcard/Download/nijiframe-test-evidence/local-failure.png")
+            device.dumpWindowHierarchy(File(context.cacheDir,"local-failure.xml"))
+            println("Local UI hierarchy: "+File(context.cacheDir,"local-failure.xml").readText())
+            throw error
         } finally {
             scenario.close();library.delete(id);previous?.let {library.markOpened(it)}
         }

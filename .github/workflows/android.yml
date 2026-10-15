@@ -91,6 +91,9 @@ jobs:
           mkdir -p "$ANDROID_AVD_HOME"
           echo no | avdmanager create avd --name ci --device pixel_6 --path "$ANDROID_AVD_HOME/ci.avd" --package 'system-images;android-${{ matrix.api }};${{ matrix.image }};x86_64'
           test -f "$ANDROID_AVD_HOME/ci.ini"
+          # Google APIs images need more userdata space than the AVD CLI default.
+          sed -i '/^disk.dataPartition.size=/d' "$ANDROID_AVD_HOME/ci.avd/config.ini"
+          echo 'disk.dataPartition.size=6G' >> "$ANDROID_AVD_HOME/ci.avd/config.ini"
           "$ANDROID_HOME/emulator/emulator" -avd ci -port 5554 -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect > emulator.log 2>&1 &
           niji_emulator_pid=$!
           trap 'adb emu kill || true; kill "$niji_emulator_pid" 2>/dev/null || true' EXIT
@@ -130,6 +133,7 @@ jobs:
           adb shell settings put global window_animation_scale 0
           adb shell settings put global transition_animation_scale 0
           adb shell settings put global animator_duration_scale 0
+          adb shell df -k /data
           if ./gradlew --no-daemon --max-workers=2 :app:connectedDebugAndroidTest; then niji_test_status=0; else niji_test_status=$?; fi
           adb pull /sdcard/Download/nijiframe-test-evidence app/build/ui-evidence || true
           adb logcat -d > app/build/emulator-logcat.txt || true
