@@ -149,7 +149,7 @@ internal fun NijiFrame(editor: EditorViewModel) {
                         ToolPanel(ui,editor,Modifier.width(310.dp).fillMaxHeight())
                     } else Column(Modifier.fillMaxSize()) {
                         EditorCanvas(ui,editor,Modifier.weight(1f).fillMaxWidth())
-                        ToolPanel(ui,editor,Modifier.fillMaxWidth().heightIn(min=150.dp,max=270.dp))
+                        ToolPanel(ui,editor,Modifier.fillMaxWidth().heightIn(min=150.dp,max=if(ui.tool==EditorTool.LOCAL) 340.dp else 270.dp))
                     }
                 }
             }
