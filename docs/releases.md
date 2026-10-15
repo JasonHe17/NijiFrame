@@ -1,6 +1,6 @@
 # Release preparation
 
-The current 0.3.0-dev APK is a development artifact, not a stable release. This document defines the next alpha distribution process; no production signing key or signed release is provided by the repository.
+The current 0.4.0-dev APK is a development artifact, not a stable release. This document defines the next alpha distribution process; no production signing key or signed release is provided by the repository.
 
 ## Version and artifacts
 
@@ -15,6 +15,6 @@ The maintainer controls and backs up the signing key; keep its keystore and pass
 
 A release build can be prepared with `./gradlew :app:assembleRelease`; this repository has no release signing configuration, so that output must not be presented as an installable signed release. Signing is a separate controlled step using the maintainer's key or an explicitly configured CI secret. Never generate or commit a shared production key as part of an ordinary build.
 
-Before publishing an update, install the previous signed alpha on a dedicated device/emulator, import and edit a fixture, then install the new APK **without uninstalling**. Verify the signing certificate, version code, retained project list, original bytes, geometry, region data and exported pixels. Separately reopen exported v1/v2/v3 fixtures. If migration fails, stop distribution and retain the last working release; reinstalling and losing app data is not a passing upgrade test.
+Before publishing an update, install the previous signed alpha on a dedicated device/emulator, import and edit a fixture, then install the new APK **without uninstalling**. Verify the signing certificate, version code, retained project list, original bytes, geometry, region data and exported pixels. Separately reopen exported v1/v2/v3/v4 fixtures. If migration fails, stop distribution and retain the last working release; reinstalling and losing app data is not a passing upgrade test.
 
 Physical-device testing and user acceptance remain release gates for device/performance claims. Drafting this process does not mark signing, upgrade testing or release publication complete.

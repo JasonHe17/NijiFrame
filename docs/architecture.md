@@ -39,7 +39,7 @@ Accessibility starts with labeled actions, readable states, adequate touch targe
 1. Bootstrap the Android app, reproducible Gradle wrapper, editor state and CI checks.
 2. Import, display and adjust one image; persist a project and reopen it after process termination.
 3. Export with verified orientation, crop, resolution and color behavior.
-4. Explicit local masks and local exposure are implemented; natural portrait effects and automatic analysis remain separate candidates.
+4. Explicit local masks and local exposure are implemented; a manually selected softening candidate is available experimentally; automatic analysis remains separate.
 5. Preserve portable operation semantics; perform Windows read/modify/return validation when a Windows implementation is scheduled.
 6. Improve performance and visual quality with physical-device measurements and user feedback.
 
@@ -59,4 +59,4 @@ The platform layer handles file pickers, project thumbnails, format/size choices
 
 One source-coordinate region consists of bounded immutable add/erase strokes. It is stored as a separate checksummed resource in v3 packages. Geometry mapping is shared by input and the selection overlay; exposure is applied before geometry, so subsequent crop/rotation does not move the region relative to source content. The UI explicitly switches between drawing and moving the canvas. The local tool keeps a draft history for completed strokes and exposure gestures; applying creates one main-history transaction, cancelling discards it. Presets preserve the region; original comparison suppresses all adjustments, including local exposure.
 
-The 1024-side coverage grid and source-unit brush radii are processing semantics, not a physical-device performance promise. Explicit limits bound resources and raster work. Automatic segmentation, edge snapping and natural skin processing are not enabled by this feature.
+The 1024-side coverage grid and source-unit brush radii are processing semantics, not a physical-device performance promise. Explicit limits bound resources and raster work. Automatic segmentation and edge snapping are not enabled. V4 adds a default-off softening candidate before global tone, using the same explicit region; its visual quality still needs user acceptance.
