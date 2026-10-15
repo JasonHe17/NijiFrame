@@ -48,4 +48,34 @@ int main() {
     const uint32_t unchanged=local[1];assert(nf_local_exposure(local,mask,3,0.0f)==0);assert(local[1]==unchanged);
     assert(nf_local_exposure(local,nullptr,3,1.0f)==-1);
     assert(nf_local_exposure(local,mask,3,4.0f)==-1);
+
+    // Softening is out-of-place and leaves unselected/zero-strength pixels bit-identical.
+    const int w=23,h=71;
+    std::vector<uint32_t> skin(w*h), softened(w*h), protected_skin(w*h), strips(w*h);
+    std::vector<uint8_t> region(w*h,255);
+    for(int y=0;y<h;++y) for(int x=0;x<w;++x) {
+        const uint32_t v=100+((x+y)%2)*8;skin[y*w+x]=0xff000000u|(v<<16)|(v<<8)|v;
+        if(x<3) region[y*w+x]=0;
+    }
+    assert(nf_soften(skin.data(),softened.data(),region.data(),w,h,0,h,3,0,.75f)==0 && skin==softened);
+    assert(nf_soften(skin.data(),softened.data(),region.data(),w,h,0,h,3,.8f,0)==0);
+    assert(nf_soften(skin.data(),protected_skin.data(),region.data(),w,h,0,h,3,.8f,1)==0);
+    assert(softened[10*w+10]!=skin[10*w+10]);
+    assert(std::abs(int(protected_skin[10*w+10]&255)-int(skin[10*w+10]&255))<=
+           std::abs(int(softened[10*w+10]&255)-int(skin[10*w+10]&255)));
+    for(int y=0;y<h;++y) for(int x=0;x<3;++x) assert(softened[y*w+x]==skin[y*w+x]);
+    for(int radius: {1,3,6}) {
+        assert(nf_soften(skin.data(),softened.data(),region.data(),w,h,0,h,radius,.6f,.75f)==0);
+        for(int y=0;y<h;y+=32) {
+            const int first=std::max(0,y-radius),last=std::min(h,y+32+radius),rows=std::min(32,h-y);
+            assert(nf_soften(skin.data()+first*w,strips.data()+y*w,region.data()+y*w,w,last-first,y-first,rows,radius,.6f,.75f)==0);
+        }
+        assert(strips==softened);
+    }
+    uint32_t singleton=0xff789abcu,singleout=0;const uint8_t selected=255;
+    assert(nf_soften(&singleton,&singleout,&selected,1,1,0,1,6,1,0)==0 && singleout==singleton);
+    assert(nf_soften(skin.data(),skin.data(),region.data(),w,h,0,h,3,.5f,.5f)==-1);
+    assert(nf_soften(skin.data(),softened.data(),region.data(),w,h,0,h,7,.5f,.5f)==-1);
+    assert(nf_soften(skin.data(),softened.data(),region.data(),w,h,-1,h,3,.5f,.5f)==-1);
+    assert(nf_soften(skin.data(),softened.data(),region.data(),w,h,0,h,3,std::numeric_limits<float>::quiet_NaN(),.5f)==-1);
 }

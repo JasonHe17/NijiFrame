@@ -15,6 +15,9 @@ int nf_basic_tone(uint32_t* pixels, size_t count, const nf_adjustments* paramete
 int nf_sharpen(const uint32_t* source, uint32_t* destination, int width, int height, float amount);
 int nf_vignette(uint32_t* pixels, int width, int full_height, int first_row, int rows, float amount);
 int nf_local_exposure(uint32_t* pixels, const uint8_t* mask, size_t count, float ev);
+// Source includes neighboring halo rows; destination/mask contain width*rows elements.
+int nf_soften(const uint32_t* source, uint32_t* destination, const uint8_t* mask,
+              int width, int height, int first_row, int rows, int radius, float strength, float protection);
 #ifdef __cplusplus
 }
 #endif

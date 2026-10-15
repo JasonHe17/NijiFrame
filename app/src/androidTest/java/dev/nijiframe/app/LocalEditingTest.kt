@@ -124,9 +124,15 @@ class LocalEditingTest {
             scrollTo("局部曝光调整")
             val slider=desc("局部曝光调整").visibleBounds
             device.swipe(slider.centerX(),slider.centerY(),slider.left+slider.width()*3/4,slider.centerY(),15)
+            device.waitForIdle()
+            tap("柔肤（实验）")
+            scrollTo("柔肤强度调整")
+            val soften=desc("柔肤强度调整").visibleBounds
+            device.swipe(soften.left+8,soften.centerY(),soften.centerX(),soften.centerY(),15)
             device.waitForIdle();tap("应用调整")
             await {library.read(id).manifest.edit.local.exposureEv>.5f}
             val saved=library.read(id).manifest.edit
+            assertTrue(saved.local.soften>.1f)
             assertEquals(1,saved.local.region.strokes.size)
             val expectedPoint=requireNotNull(SourceGeometry(900,600,initial).toSource(260f,370f))
             val actualPoint=saved.local.region.strokes.single().points.first()

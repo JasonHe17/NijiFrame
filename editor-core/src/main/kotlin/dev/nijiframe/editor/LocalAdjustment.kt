@@ -34,8 +34,12 @@ import kotlin.math.*
     companion object { const val MAX_STROKES=128; const val MAX_POINTS=4096 }
 }
 @Serializable data class LocalAdjustment(val exposureEv: Float = 0f,
-    @Transient val region: Region = Region()) {
-    fun validate() { require(exposureEv.isFinite() && exposureEv in -3f..3f);region.validate() }
+    @Transient val region: Region = Region(), val soften: Float = 0f, val detailProtection: Float = .75f) {
+    fun validate() {
+        require(exposureEv.isFinite() && exposureEv in -3f..3f)
+        require(soften.isFinite() && soften in 0f..1f && detailProtection.isFinite() && detailProtection in 0f..1f) { "Invalid softening parameters" }
+        region.validate()
+    }
 }
 @Serializable data class MaskResource(val path: String="assets/local-mask.json", val bytes: Int, val sha256: String)
 
