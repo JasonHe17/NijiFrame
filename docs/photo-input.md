@@ -18,7 +18,7 @@ HEIF/AVIF codec support is device-dependent. AOSP API 29 was observed to expand 
 
 RAW/DNG/ProRAW, TIFF, independent HLG/PQ HDR, HDR-base gainmaps, transparent pixels and animated images are not supported. Explicit HDR transfer tags in PNG cICP and HEIF/AVIF NCLX/NCLC are refused, including on older systems without named HDR color spaces; a file with an HDR property on an auxiliary item is conservatively refused too. Common SDR-base Ultra HDR JPEG remains accepted. Unrecognized/custom ICC behavior is limited by the system decoder; support for arbitrary ICC LUT profiles is not claimed. Missing profiles default to sRGB except the explicit Adobe RGB EXIF case. An embedded JPEG ICC takes precedence over that EXIF fallback. New imports record `honorExifColorSpace=true`; old projects retain false, preserving their previous handling of unprofiled JPEGs. Reimport an original as a new photo to adopt the new EXIF interpretation.
 
-The picker accepts the advertised MIME types; file contents determine actual support. Corrupt or unavailable codecs produce an error without replacing the saved project. Limits remain 100 MP, 64 MiB and 32,768 pixels per edge. No remote service, model download or new runtime codec library is involved.
+The picker accepts the advertised MIME types; file contents determine actual support. Corrupt or unavailable codecs produce an error without replacing the saved project. Limits are 210 MP, 64 MiB and 32,768 pixels per edge. No remote service, model download or new runtime codec library is involved. The [device survey and coverage plan](device-compatibility.md) separates manufacturer specifications from file, emulator and physical-device evidence.
 
 ## Preview, detail and export
 

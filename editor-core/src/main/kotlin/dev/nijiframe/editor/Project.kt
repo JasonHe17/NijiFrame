@@ -72,7 +72,9 @@ data class Manifest(
     fun current(): Manifest = copy(version = 6, pipeline = "srgb-import-v6",
         edit = if(version == 1) edit.copy(crop = edit.crop?.let { Geometry.legacyCrop(it,width,height,edit.turns) }) else edit)
     companion object {
-        const val MAX_PIXELS = 100_000_000L
+        // Include 200 MP-class dimensions such as 16384x12288 (201,326,592 pixels).
+        // Decode/export memory admission remains independent of this resource ceiling.
+        const val MAX_PIXELS = 210_000_000L
         const val MAX_EDGE = 32_768
     }
 }

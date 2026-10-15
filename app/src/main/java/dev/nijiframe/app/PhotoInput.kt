@@ -33,7 +33,7 @@ internal object PhotoInput {
         require(mime!="image/webp" || bytes.size<21 || String(bytes,12,4,Charsets.US_ASCII)!="VP8X" || bytes[20].toInt() and 2==0) {"暂不支持动画 WebP，请导出静态照片"}
         require(width>0 && height>0) {"此设备的解码器不支持这张照片，请尝试 JPEG 格式"}
         require(width<=Manifest.MAX_EDGE && height<=Manifest.MAX_EDGE && width.toLong()*height<=Manifest.MAX_PIXELS) {
-            "图片超过当前 1 亿像素或单边 32768 像素限制"
+            "图片超过当前 2.1 亿像素或单边 32768 像素限制"
         }
         require(!hasHdrTransfer(bytes,requireNotNull(mime)) && (Build.VERSION.SDK_INT<34 || (color!=ColorSpace.get(ColorSpace.Named.BT2020_HLG) && color!=ColorSpace.get(ColorSpace.Named.BT2020_PQ)))) {
             "这张照片是 HLG/PQ HDR 编码，尚不能可靠转换；请先由相册导出 SDR JPEG，普通广色域和 Ultra HDR JPEG 可直接导入"

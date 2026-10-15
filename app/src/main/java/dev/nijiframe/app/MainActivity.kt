@@ -268,7 +268,7 @@ private fun AboutDialog(onDismiss: () -> Unit) {
     }}
     AlertDialog(onDismissRequest=onDismiss,title={Text(if(licenses) "开源许可" else "关于 NijiFrame")},
         text={Column(Modifier.heightIn(max=400.dp).verticalScroll(rememberScrollState())) {
-            Text(if(licenses) text else "${BuildConfig.VERSION_NAME} · 构建 ${BuildConfig.VERSION_CODE}\n源码 ${BuildConfig.SOURCE_REVISION}\n\n本地照片编辑器 · GPL-3.0-only\n\n照片在本机处理。支持常见广色域 JPEG、8/16 位 PNG、WebP，以及系统可解码的 HEIC/HEIF、AVIF；按 sRGB／SDR 编辑和导出，保留原文件。暂不支持 RAW、TIFF、透明像素或独立 HLG/PQ HDR，当前上限 1 亿像素、64 MiB，单边不超过 32768 像素。\n\n工程自动保存在本应用中；卸载前请导出重要工程。提供实验柔肤；Windows 接力仍在后续规划中。")
+            Text(if(licenses) text else "${BuildConfig.VERSION_NAME} · 构建 ${BuildConfig.VERSION_CODE}\n源码 ${BuildConfig.SOURCE_REVISION}\n\n本地照片编辑器 · GPL-3.0-only\n\n照片在本机处理。支持常见广色域 JPEG、8/16 位 PNG、WebP，以及系统可解码的 HEIC/HEIF、AVIF；按 sRGB／SDR 编辑和导出，保留原文件。暂不支持 RAW、TIFF、透明像素或独立 HLG/PQ HDR，当前上限 2.1 亿像素、64 MiB，单边不超过 32768 像素。\n\n工程自动保存在本应用中；卸载前请导出重要工程。提供实验柔肤；Windows 接力仍在后续规划中。")
             if(!licenses) TextButton(onClick={licenses=true}) {Text("查看开源许可")}
         }},confirmButton={TextButton(onClick=onDismiss) {Text("关闭")}})
 }

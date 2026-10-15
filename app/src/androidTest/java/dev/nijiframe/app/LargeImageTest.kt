@@ -24,6 +24,45 @@ class LargeImageTest {
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
 
+    @Test fun twoHundredMegapixelJpegKeepsNativeDetailAndEditableOriginal() = runBlocking {
+        val root=File(context.cacheDir,"phone-large-${System.nanoTime()}").apply {mkdirs()}
+        val bytes=instrumentation.context.assets.open("formats/large-201mp.jpg").use {it.readBytes()}
+        val file=File(root,"phone.jpg").apply {writeBytes(bytes)}
+        val repo=ProjectRepository(context,File(root,"library"))
+        val (project,proxy)=repo.importPhoto(Uri.fromFile(file))
+        try {
+            assertEquals(12288,project.manifest.width);assertEquals(16384,project.manifest.height)
+            assertEquals(1536,proxy.width);assertEquals(2048,proxy.height)
+            assertArrayEquals(bytes,project.original)
+            val detail=DetailRenderer.render(project,Edit(),MaskPoint(.5f,.5f),64,64)
+            try {
+                // EXIF 6 turns the original vertical one-pixel stripes into horizontal ones.
+                assertTrue(kotlin.math.abs(Color.red(detail.bitmap.getPixel(32,32))-
+                    Color.red(detail.bitmap.getPixel(32,33)))>180)
+            } finally {detail.bitmap.recycle()}
+            val edit=Edit(exposureEv=.5f,turns=1,crop=Crop(100,100,16000,12000))
+            val portable=File(root,"large.nijiproj")
+            repo.exportProject(project.withEdit(edit),Uri.fromFile(portable));file.delete()
+            val (reopened,decoded)=repo.open(Uri.fromFile(portable))
+            try {
+                assertArrayEquals(bytes,reopened.original);assertEquals(edit,reopened.manifest.edit)
+                // A constrained device must refuse before touching an existing output.
+                val limited=ProjectRepository(context,File(root,"limited")) {96L*1024*1024}
+                val output=File(root,"output.png").apply {writeText("keep")}
+                try {limited.exportPhoto(reopened,decoded,Uri.fromFile(output));fail("Expected memory refusal")}
+                catch(error: IllegalArgumentException) {assertTrue(error.message!!.contains("内存"))}
+                assertEquals("keep",output.readText())
+                limited.exportPhoto(reopened,decoded,Uri.fromFile(output),ExportSettings(PhotoFormat.PNG,maxEdge=1280))
+                val rendered=BitmapFactory.decodeFile(output.path)
+                try {
+                    assertEquals(1280,rendered.width);assertEquals(960,rendered.height)
+                    assertTrue(Color.red(rendered.getPixel(200,200))>80)
+                } finally {rendered.recycle()}
+                assertArrayEquals(bytes,reopened.original)
+            } finally {decoded.recycle()}
+        } finally {proxy.recycle();root.deleteRecursively()}
+    }
+
     // Generate large, lossless synthetic inputs without a full-sized test bitmap allocation.
     private fun png(width: Int, height: Int, transparent: Boolean = false, alphaChannel: Boolean = transparent): ByteArray {
         val encoded=ByteArrayOutputStream()

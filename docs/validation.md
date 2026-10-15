@@ -11,7 +11,7 @@
 | `LocalEditingTest` | Region pixels/overlay through crop, straightening, flips and rotation; portable export after private source deletion; approximate-to-reference settling; local draft history, save/reopen and real brush UI |
 | `DetailRendererTest` / `DetailInspectorTest` | Region versus full rendering with halos, all EXIF orientations, crop/rotation/flip and vignette coordinates, 100 MP original texture without a full bitmap, real screenshot pixel scale, comparison, activity recreation and unchanged tool drafts/projects |
 | `DetailRegionTest` | Native overlay geometry, real detail brush over a base mask, padding/cancelled gesture rejection, compare, undo/redo/cancel, recreation, portable reopen/PNG agreement and stale frame rejection |
-| `LargeImageTest` | 12 MP JPEG full-size output and EXIF, 48 MP editable round trip and local/crop coordinates, 100 MP bounded preview and process-owner restore, >32 MiB encoded image integrity, sampled-alpha rejection and memory refusal before truncating an output |
+| `LargeImageTest` | 12 MP JPEG full-size output and EXIF, 48 MP editable round trip and local/crop coordinates, 100 MP bounded preview and process-owner restore, 201 MP JPEG native detail/round-trip/reduced export, >32 MiB encoded image integrity, sampled-alpha rejection and memory refusal before truncating an output |
 | `SofteningTest` | JNI/full-image versus halo-strip pixels, zero-strength and zero-mask identity, editable softening round trip and independent PNG decode |
 | `PortraitRegionTest` | Real offline model inference with no face, failure/cancellation preserving existing edits, absence of network/upload components, synthetic non-face rejection and fallback cancellation, persisted base + manual correction, history, PNG and detail agreement |
 | `:app:lintDebug`, `:app:assembleDebug` | Android static analysis and both configured native ABIs |
@@ -20,7 +20,7 @@ Use a dedicated test installation: the Gradle runner installs/uninstalls APKs, s
 
 The UI test uses synthetic images and the actual system picker; it does not inject fake activity results or disable rendering. Accessibility locators are refreshed at interaction boundaries to avoid using stale nodes after Compose/DocumentUI updates. It uses UIAutomator 2.4.0. API 34+ accessibility-cache clearing is confined to test code. Runtime behavior does not depend on testing switches.
 
-GitHub Actions runs Linux build/native checks and API 29/36 Android jobs. Workflow reports, APKs, and available UI evidence are retained as artifacts for seven days. Always inspect checks on the commit being reviewed; a configuration file alone is not proof that remote CI passed.
+GitHub Actions runs Linux build/native checks and API 29/31/34/36 Android jobs. Workflow reports, APKs, and available UI evidence are retained as artifacts for seven days. Always inspect checks on the commit being reviewed; a configuration file alone is not proof that remote CI passed.
 
 ## Manual acceptance and process recovery
 
@@ -37,9 +37,9 @@ Use synthetic or appropriately licensed images. Never commit private photographs
 
 ## Coverage and limitations
 
-Local checks use Linux x86_64 and Android 16/API 36 x86_64. Arm64 APK content is compiled; it has not been exercised on a phone. The declared API 26 minimum is not a tested device matrix. GitHub API 29/36 jobs provide separate hosted evidence when completed successfully. There are no Windows execution or physical-device performance claims.
+Local checks use Linux x86_64 and Android 16/API 36 x86_64. Arm64 APK content is compiled; it has not been exercised on a phone. The declared API 26 minimum is not a tested device matrix. GitHub API 29/31/34/36 jobs provide separate hosted evidence when completed successfully. There are no Windows execution or physical-device performance claims.
 
-The 100 MP / 64 MiB / 32,768-pixel-edge limits are current implementation bounds, not a promise of responsive operation on every phone. Native processing is cancellable between strips; platform decoder/provider I/O has platform-dependent cancellation latency. Saving uses synchronized file contents and atomic replacement, not a guarantee against all storage hardware failures. External providers can leave partial destinations on failure.
+The 210 MP / 64 MiB / 32,768-pixel-edge limits are current implementation bounds, not a promise of responsive operation on every phone. Native processing is cancellable between strips; platform decoder/provider I/O has platform-dependent cancellation latency. Saving uses synchronized file contents and atomic replacement, not a guarantee against all storage hardware failures. External providers can leave partial destinations on failure.
 
 UI checks cover touch/accessibility labels and reconfiguration, not a complete TalkBack audit or real-user study. Working pixels and exports are opaque SDR/sRGB; input conversion and codec boundaries are described in photo-input.md. Softening and geometric portrait suggestions remain experimental; feature implementation or a dependency license is not patent clearance.
 

@@ -77,8 +77,8 @@
 
 | 项目 | 当前范围 |
 | --- | --- |
-| 平台 | Android；配置最低 Android 8.0／API 26，自动化模拟器验证覆盖 API 29、36 |
-| 输入 | JPEG（含常见广色域与 Ultra HDR SDR 底图）、8/16 位不透明 PNG、静态 WebP、系统可解码的 HEIC/HEIF 与 AVIF；单张不超过 1 亿像素、64 MiB，单边不超过 32768 像素 |
+| 平台 | Android；配置最低 Android 8.0／API 26，自动化模拟器验证覆盖 API 29、31、34、36 |
+| 输入 | JPEG（含常见广色域与 Ultra HDR SDR 底图）、8/16 位不透明 PNG、静态 WebP、系统可解码的 HEIC/HEIF 与 AVIF；单张不超过 2.1 亿像素、64 MiB，单边不超过 32768 像素 |
 | 输出 | JPEG／PNG；原尺寸或缩小长边，不放大小图；照片导出不复制原图元数据 |
 | 可编辑工程 | 实验性 `.nijiproj` v6，兼容读取 v1–v5；工程包含原图及原有元数据 |
 | 保存 | 已应用的修改自动保存；未应用预览和跨次打开的完整撤销历史不属于持久保存内容 |
@@ -104,6 +104,7 @@
 - [报告问题与提出建议](https://github.com/JasonHe17/NijiFrame/issues)
 - [构建与开发](docs/development.md) · [贡献说明](CONTRIBUTING.md)
 - [架构](docs/architecture.md) · [工程格式](docs/project-format.md) · [验证范围](docs/validation.md)
+- [手机兼容调查与测试范围](docs/device-compatibility.md)
 
 ## 许可
 

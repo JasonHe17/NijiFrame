@@ -35,7 +35,7 @@ cmake --build build/native
 ctest --test-dir build/native --output-on-failure
 ```
 
-[GitHub Actions](https://github.com/JasonHe17/NijiFrame/actions/workflows/android.yml) 执行构建、Lint、JVM/native 检查和 API 29／36 模拟器测试，保留报告与开发 APK。应查看具体提交的运行结果；历史失败不会被描述为通过。物理手机与 Windows 尚未验证。
+[GitHub Actions](https://github.com/JasonHe17/NijiFrame/actions/workflows/android.yml) 执行构建、Lint、JVM/native 检查和 API 29／31／34／36 模拟器测试，保留报告与开发 APK。应查看具体提交的运行结果；历史失败不会被描述为通过。物理手机与 Windows 尚未验证。
 
 
 ## 模块导航
