@@ -20,7 +20,7 @@ Use a dedicated test installation: the Gradle runner installs/uninstalls APKs, s
 
 The UI test uses synthetic images and the actual system picker; it does not inject fake activity results or disable rendering. Accessibility locators are refreshed at interaction boundaries to avoid using stale nodes after Compose/DocumentUI updates. It uses UIAutomator 2.4.0. API 34+ accessibility-cache clearing is confined to test code. Runtime behavior does not depend on testing switches.
 
-GitHub Actions runs Linux build/native checks and API 29/31/34/36 Android jobs. Workflow reports, APKs, and available UI evidence are retained as artifacts for seven days. Always inspect checks on the commit being reviewed; a configuration file alone is not proof that remote CI passed.
+GitHub Actions runs Linux build/native checks and API 29/31/34/36/37.0 Android jobs plus an API 35 16 KiB-page job. Workflow reports, APKs, and available UI evidence are retained as artifacts for seven days. Always inspect checks on the commit being reviewed; a configuration file alone is not proof that remote CI passed.
 
 ## Manual acceptance and process recovery
 
@@ -52,3 +52,5 @@ Large-image tests use generated synthetic inputs, not user photographs. A 100 MP
 `FaceSearchTest` checks odd-sized search-window coverage, source-coordinate remapping, duplicate-location versus separate-location decisions, and subsequent edit geometry. These are synthetic geometry checks, not face-recognition accuracy or a labeled portrait benchmark. Private licensed evaluations remain outside the repository and hosted CI.
 
 `PhotoFormatTest` verifies common wide-gamut and SDR-base HDR input conversion, JPEG/PNG/HEIF/WebP/AVIF orientation and round trips, exact original preservation, detail/export color agreement, large sampled wide JPEG, codec memory refusal, and HDR-transfer/animation refusal. Its fixtures are generated colors; it is not a physical-phone or arbitrary-camera-format certification.
+
+Phone compatibility jobs use a 512 MiB application heap for positive full-output workflows, configured only in dedicated test emulators. Default 192 MiB API 31/34 images hit memory refusal during the combined suite; an isolated API 31 12 MP export passes. This is a test-resource distinction, not a product memory optimization or a low-memory certification. Budget-refusal assertions stay enabled. See [the device matrix](device-compatibility.md), including 16 KiB-page runtime and static ELF/ZIP checks.

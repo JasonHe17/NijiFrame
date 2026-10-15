@@ -124,19 +124,25 @@ class PhotoFormatTest {
     }
 
     @Test fun platformPhoneFormatsRetainOrientationAndEditableOriginals() = runBlocking {
-        for(extension in listOf("heic","webp","avif")) for(orientation in listOf(1,2,6)) {
-            val bytes=ins.context.assets.open("formats/quadrants-$orientation.$extension").use {it.readBytes()}
+        for(extension in listOf("heic","webp","avif")) for(orientation in if(extension=="avif") (1..8).toList() else listOf(1,2,6)) {
+            val prefix=if(extension=="avif") "limited" else "quadrants"
+            val bytes=ins.context.assets.open("formats/$prefix-$orientation.$extension").use {it.readBytes()}
             if(extension=="avif" && Build.VERSION.SDK_INT<31) {
                 try {ImagePipeline.inspect(bytes);fail("Old system must explain unavailable AVIF")}
                 catch(error: IllegalArgumentException) {assertTrue(error.message!!.contains("Android 12"))}
                 continue
             }
-            val width=if(orientation==6) 128 else 192;val height=if(orientation==6) 192 else 128
+            val width=if(orientation>=5) 128 else 192;val height=if(orientation>=5) 192 else 128
             val decoded=try {roundTrip(bytes,width,height)} catch(error: Throwable) {
                 throw AssertionError("Failed $extension orientation $orientation",error)
             }
-            val expected=when(orientation) {2->Color.rgb(50,160,80);6->Color.rgb(60,80,180);else->Color.rgb(180,60,70)}
-            try {closeColor(expected,decoded.getPixel(20,20),6)} finally {decoded.recycle()}
+            val expected=when(orientation) {
+                2,8->Color.rgb(50,160,80);3,7->Color.rgb(170,150,50)
+                4,6->Color.rgb(60,80,180);else->Color.rgb(180,60,70)
+            }
+            try {closeColor(expected,decoded.getPixel(20,20),6)}
+            catch(error: AssertionError) {throw AssertionError("$extension orientation $orientation",error)}
+            finally {decoded.recycle()}
         }
     }
 
@@ -209,8 +215,8 @@ class PhotoFormatTest {
         val decoded=roundTrip(bytes,192,128)
         try {
             val expected=Color.rgb(180,60,70);val actual=decoded.getPixel(20,20)
-            if(Build.VERSION.SDK_INT<=29) {
-                // API 29 AOSP expands full-range HEVC as limited-range. Preserve the failing
+            if(Build.VERSION.SDK_INT<=32) {
+                // API 29/31 AOSP expand full-range HEVC as limited-range. Preserve the failing
                 // fixture and expose the limitation; do not claim the codec's colors are fixed.
                 assertTrue(info.notice.contains("色偏"))
                 val platform=BitmapFactory.decodeByteArray(bytes,0,bytes.size)
@@ -218,6 +224,33 @@ class PhotoFormatTest {
                 println("Full-range HEIF codec reference=$expected platform=$actual; known older-system limitation")
             } else closeColor(expected,actual,6)
         } finally {decoded.recycle()}
+    }
+
+    @Test fun fullRangeAvifKeepsOriginalFailuresVisibleAndNormalizesMirrors() = runBlocking {
+        if(Build.VERSION.SDK_INT<31) {
+            val bytes=ins.context.assets.open("formats/quadrants-2.avif").use {it.readBytes()}
+            assertThrows(IllegalArgumentException::class.java) {ImagePipeline.inspect(bytes)}
+            return@runBlocking
+        }
+        for(orientation in listOf(1,2,6)) {
+            // Preserve original full-range fixtures: API 31 misinterprets their range.
+            val bytes=ins.context.assets.open("formats/quadrants-$orientation.avif").use {it.readBytes()}
+            val info=ImagePipeline.inspect(bytes)
+            assertEquals(orientation,info.orientation)
+            val decoded=roundTrip(bytes,if(orientation==6) 128 else 192,if(orientation==6) 192 else 128)
+            try {
+                if(Build.VERSION.SDK_INT<=32) {
+                    assertTrue(info.notice.contains("色偏"))
+                    val raw=BitmapFactory.decodeByteArray(bytes,0,bytes.size)
+                    // Pixel coordinates are independently mapped here; do not reuse the product transform.
+                    val reference=when(orientation) {2->raw.getPixel(171,20);6->raw.getPixel(20,107);else->raw.getPixel(20,20)}
+                    try {assertEquals(reference,decoded.getPixel(20,20))} finally {raw.recycle()}
+                } else {
+                    val expected=when(orientation) {2->Color.rgb(50,160,80);6->Color.rgb(60,80,180);else->Color.rgb(180,60,70)}
+                    closeColor(expected,decoded.getPixel(20,20),6)
+                }
+            } finally {decoded.recycle()}
+        }
     }
 
     @Test fun unsupportedHdrTransferAndAnimationAreExplicitlyRefused() {

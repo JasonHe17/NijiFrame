@@ -6,6 +6,7 @@ import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.exifinterface.media.ExifInterface
 import dev.nijiframe.editor.Manifest
+import dev.nijiframe.editor.AvifOrientation
 import java.nio.ByteBuffer
 
 /** Source decoding policy for srgb-import-v6. Encoded originals are never rewritten. */
@@ -24,11 +25,10 @@ internal object PhotoInput {
         require(mime in mimeTypes) {"暂不支持此图片编码；可导入 JPEG、PNG、WebP、HEIC/HEIF 或 AVIF。RAW、TIFF 请先由相机软件导出"}
         require(mime!="image/avif" || Build.VERSION.SDK_INT>=31) {"AVIF 需要 Android 12 或更新系统及可用解码器，请改用 JPEG"}
         require(mime !in setOf("image/heif","image/heic") || Build.VERSION.SDK_INT>=28) {"HEIC/HEIF 需要 Android 9 或更新系统及可用解码器，请改用 JPEG"}
-        var width=bounds.outWidth;var height=bounds.outHeight;var color=bounds.outColorSpace
+        val width=bounds.outWidth;val height=bounds.outHeight;val color=bounds.outColorSpace
         if(mime=="image/avif" && Build.VERSION.SDK_INT>=31) {
             val header=avifHeader(bytes)
             require(!header.animated) {"暂不支持动画 AVIF，请导出静态照片"}
-            width=header.width;height=header.height;color=header.color
         }
         require(mime!="image/webp" || bytes.size<21 || String(bytes,12,4,Charsets.US_ASCII)!="VP8X" || bytes[20].toInt() and 2==0) {"暂不支持动画 WebP，请导出静态照片"}
         require(width>0 && height>0) {"此设备的解码器不支持这张照片，请尝试 JPEG 格式"}
@@ -43,7 +43,7 @@ internal object PhotoInput {
             (exif.getAttributeInt(ExifInterface.TAG_COLOR_SPACE,-1)==2 || exif.getAttribute(ExifInterface.TAG_INTEROPERABILITY_INDEX)=="R03")
         val xmp=exif.getAttribute(ExifInterface.TAG_XMP).orEmpty()
         val gainmap=xmp.contains("hdrgm",true) || xmp.contains("hdrgainmap",true) || xmp.contains("hdr-gain-map",true)
-        val orientation=if(mime=="image/avif") 1 else exif.getAttributeInt(ExifInterface.TAG_ORIENTATION,1).takeIf {it in 1..8} ?: 1
+        val orientation=if(mime=="image/avif") AvifOrientation.read(bytes) else exif.getAttributeInt(ExifInterface.TAG_ORIENTATION,1).takeIf {it in 1..8} ?: 1
         return ImagePipeline.ImageInfo(width,height,orientation,requireNotNull(mime),
             if(adobe) "Adobe RGB" else color?.name ?: "未标注（按 sRGB）",adobe,gainmap)
     }
@@ -146,7 +146,9 @@ internal object PhotoInput {
     }
     @Suppress("DEPRECATION")
     fun decodeRegion(bytes: ByteArray,info: ImagePipeline.ImageInfo,rect: Rect): Bitmap {
-        if(info.decoderOriented) return toWorking(decodeAvif(bytes,1,rect),info)
+        // ImageDecoder ignores AVIF imir on some versions; BitmapFactory leaves
+        // transforms unapplied, so all paths normalize the primary item's metadata once.
+        if(info.mime=="image/avif") return fullFrameRegion(bytes,info,rect)
         val w=info.encodedWidth;val h=info.encodedHeight
         val l=rect.left;val t=rect.top;val r=rect.right;val b=rect.bottom
         val encoded=when(info.orientation) {
@@ -197,23 +199,13 @@ internal object PhotoInput {
             try {requireOpaque(tile,check)} finally {tile.recycle()}
         }
     }
-    private class Header(val width: Int,val height: Int,val color: ColorSpace?,val animated: Boolean): RuntimeException(null,null,false,false)
+    private class Header(val animated: Boolean): RuntimeException(null,null,false,false)
     @RequiresApi(31)
     private fun avifHeader(bytes: ByteArray): Header {
-        // ImageDecoder applies AVIF container rotation/mirroring; stop at the header before allocating pixels.
+        // Inspect animation without allocating pixels. Geometry uses primary-item metadata instead.
         try {ImageDecoder.decodeBitmap(ImageDecoder.createSource(ByteBuffer.wrap(bytes))) {_,info,_->
-            throw Header(info.size.width,info.size.height,info.colorSpace,info.isAnimated)
+            throw Header(info.isAnimated)
         }} catch(header: Header) {return header}
         error("无法读取 AVIF 图像信息")
-    }
-    fun decodeAvif(bytes: ByteArray,sample: Int,rect: Rect?=null): Bitmap {
-        if(Build.VERSION.SDK_INT<31) throw IllegalArgumentException("AVIF 需要 Android 12 或更新系统")
-        return ImageDecoder.decodeBitmap(ImageDecoder.createSource(ByteBuffer.wrap(bytes))) {decoder,_,_->
-            decoder.allocator=ImageDecoder.ALLOCATOR_SOFTWARE
-            decoder.setTargetColorSpace(srgb)
-            decoder.setTargetSampleSize(sample)
-            rect?.let {decoder.crop=it}
-            decoder.setOnPartialImageListener {false}
-        }
     }
 }

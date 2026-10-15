@@ -20,11 +20,10 @@ object ImagePipeline {
         val colorName: String="sRGB", val assumeAdobeRgb: Boolean=false, val gainmapHint: Boolean=false) {
         val width get() = if (orientation in 5..8) encodedHeight else encodedWidth
         val height get() = if (orientation in 5..8) encodedWidth else encodedHeight
-        val decoderOriented get() = mime=="image/avif"
         val notice get() = "${mime.substringAfter('/').uppercase()} · $colorName → sRGB / SDR"+
             (if(gainmapHint) "（HDR 使用 SDR 底图）" else "")+"；原文件保留"+
-            (if(android.os.Build.VERSION.SDK_INT<=29 && mime in setOf("image/heif","image/heic"))
-                "。旧系统 HEIF 解码可能有色偏，建议先由相册导出 JPEG" else "")
+            (if(android.os.Build.VERSION.SDK_INT<=32 && mime in setOf("image/heif","image/heic","image/avif"))
+                "。此系统的 HEIF/AVIF 解码可能有色偏，建议先由相册导出 JPEG" else "")
         // These platform codecs may need whole-frame scratch even for a sampled or cropped result.
         val codecHeadroom get() = if(mime in setOf("image/avif","image/heif","image/heic")) width.toLong()*height*8 else 0L
     }
@@ -35,8 +34,7 @@ object ImagePipeline {
         require(sample > 0 && sample and (sample - 1) == 0)
         check()
         if (sample > 1 && info.mime == "image/png" && pngMayHaveAlpha(bytes)) validateOpaquePng(bytes, info, check)
-        val decoded=if(info.decoderOriented) PhotoInput.decodeAvif(bytes,sample) else
-            requireNotNull(BitmapFactory.decodeByteArray(bytes,0,bytes.size,PhotoInput.options(sample))) {"此设备无法解码这张照片，请尝试相机或相册导出的 JPEG"}
+        val decoded=requireNotNull(BitmapFactory.decodeByteArray(bytes,0,bytes.size,PhotoInput.options(sample))) {"此设备无法解码这张照片，请尝试相机或相册导出的 JPEG"}
         val bitmap=PhotoInput.toWorking(decoded,info)
         try {
             if(sample>1 && bitmap.hasAlpha() && info.mime !in setOf("image/jpeg","image/png"))

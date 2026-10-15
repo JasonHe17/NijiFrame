@@ -27,6 +27,10 @@ jobs:
         run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'ndk;28.2.13676358' 'cmake;3.22.1'
       - name: Unit tests, APK and lint
         run: ./gradlew :editor-core:test :app:assembleDebug :app:lintDebug
+      - name: Check native library alignment for 16 KB pages
+        run: |
+          "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 4 app/build/outputs/apk/debug/app-debug.apk
+          python3 scripts/check-apk-native.py app/build/outputs/apk/debug/app-debug.apk > app/build/native-alignment.json
       - name: Native checks with sanitizers
         run: |
           cmake -S image-core/src/main/cpp -B build/native -DCMAKE_BUILD_TYPE=Debug
@@ -45,6 +49,7 @@ jobs:
             app/build/outputs/apk/debug/*.sha256
             app/build/outputs/apk/debug/*.provenance.json
             app/build/reports/lint-results-debug.*
+            app/build/native-alignment.json
             editor-core/build/reports/tests/
             editor-core/build/test-results/
             build/native/Testing/
@@ -54,6 +59,12 @@ jobs:
       matrix:
         # Codec boundaries: Android 12 AVIF and Android 14 gainmap APIs.
         api: [29, 31, 34, 36]
+        image: [default]
+        include:
+          - api: '37.0'
+            image: google_apis
+          - api: 35
+            image: google_apis_ps16k
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -67,7 +78,7 @@ jobs:
           packages: platform-tools
       - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
       - name: Install SDK and emulator
-        run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'ndk;28.2.13676358' 'cmake;3.22.1' 'emulator' 'system-images;android-${{ matrix.api }};default;x86_64'
+        run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'ndk;28.2.13676358' 'cmake;3.22.1' 'emulator' 'system-images;android-${{ matrix.api }};${{ matrix.image }};x86_64'
       - name: Compile test APKs before emulator boot
         run: ./gradlew --no-daemon --max-workers=2 :app:assembleDebug :app:assembleDebugAndroidTest
       - name: Run Android project, local editing and UI checks
@@ -78,7 +89,7 @@ jobs:
           export ANDROID_EMULATOR_HOME="$ANDROID_USER_HOME"
           export ANDROID_AVD_HOME="$ANDROID_USER_HOME/avd"
           mkdir -p "$ANDROID_AVD_HOME"
-          echo no | avdmanager create avd --name ci --device pixel_6 --path "$ANDROID_AVD_HOME/ci.avd" --package 'system-images;android-${{ matrix.api }};default;x86_64'
+          echo no | avdmanager create avd --name ci --device pixel_6 --path "$ANDROID_AVD_HOME/ci.avd" --package 'system-images;android-${{ matrix.api }};${{ matrix.image }};x86_64'
           test -f "$ANDROID_AVD_HOME/ci.ini"
           "$ANDROID_HOME/emulator/emulator" -avd ci -port 5554 -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect > emulator.log 2>&1 &
           niji_emulator_pid=$!
@@ -89,6 +100,23 @@ jobs:
             sleep 2
           done
           test "$(adb shell getprop sys.boot_completed | tr -d '\r')" = 1
+          adb shell getconf PAGE_SIZE
+          if [ '${{ matrix.image }}' = google_apis_ps16k ]; then
+            test "$(adb shell getconf PAGE_SIZE | tr -d '\r')" = 16384
+          fi
+          # Keep positive full-resolution tests on the same app heap budget across
+          # system images. Separate tests inject low budgets and assert safe refusal.
+          adb root
+          adb wait-for-device
+          adb shell setprop dalvik.vm.heapgrowthlimit 512m
+          adb shell stop
+          adb shell start
+          for attempt in {1..60}; do
+            if adb shell service check package 2>/dev/null | rg -q ': found'; then break; fi
+            sleep 1
+          done
+          adb shell service check package | rg -q ': found'
+          test "$(adb shell getprop dalvik.vm.heapgrowthlimit | tr -d '\r')" = 512m
           adb shell input keyevent 82
           adb shell settings put global window_animation_scale 0
           adb shell settings put global transition_animation_scale 0

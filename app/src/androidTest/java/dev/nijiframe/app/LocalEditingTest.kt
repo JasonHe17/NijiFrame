@@ -94,7 +94,18 @@ class LocalEditingTest {
         val device=UiDevice.getInstance(instrumentation)
         fun fresh() {if(android.os.Build.VERSION.SDK_INT>=34) instrumentation.uiAutomation.clearCache()}
         fun find(text: String): UiObject {fresh();return device.findObject(UiSelector().text(text)).also {check(it.waitForExists(10000)){"Missing $text"}}}
-        fun tap(text: String) {find(text).click();device.waitForIdle();fresh()}
+        fun tap(text: String) {
+            // Rendering can replace the action node between discovery and injection.
+            // Retry only a missing node; keep the real click and its resulting assertions.
+            val deadline=System.currentTimeMillis()+10000
+            while(true) {
+                try {find(text).click();device.waitForIdle();fresh();return}
+                catch(error: androidx.test.uiautomator.UiObjectNotFoundException) {
+                    if(System.currentTimeMillis()>=deadline) throw error
+                    fresh();Thread.sleep(100)
+                }
+            }
+        }
         fun desc(label: String): UiObject {fresh();return device.findObject(UiSelector().description(label))}
         fun await(check: ()->Boolean) {val end=System.currentTimeMillis()+20000;while(System.currentTimeMillis()<end){if(runCatching(check).getOrDefault(false))return;Thread.sleep(100)};assertTrue(check())}
         fun scrollTo(label: String) {
