@@ -26,13 +26,6 @@
 
 > **开发中 · 0.2.0-dev**：当前已提供 Android 基础编辑流程，尚未发布稳定版。人像专用工具与 Windows 接力是后续方向。
 
-<p align="center">
-  <img src="docs/images/editor-light.jpg" width="300" alt="NijiFrame 实际明暗调整界面：人像预览、曝光滑杆和应用／取消按钮">
-  <img src="docs/images/editor-crop.jpg" width="300" alt="NijiFrame 实际裁剪界面：可拖动的裁剪框与比例选项">
-  <br>
-  <sub>Android 开发版实际界面：明暗调整与构图。示例照片：Gromovataya，CC0；<a href="docs/images/README.md">素材来源与截图说明</a>。</sub>
-</p>
-
 ## 为什么做 NijiFrame
 
 我们希望修图既容易开始，也能让使用者掌握每一步调整。NijiFrame 从常用的光影、色彩与构图工具做起，逐步探索适合日常人像和写真照片的编辑体验。
@@ -106,4 +99,4 @@ RAW／HDR、宽色域、透明图片、图层合成、批量处理和 AI 修图�
 
 ## 许可
 
-NijiFrame 自有代码采用 [GPL-3.0-only](LICENSE)。第三方组件和展示素材保留各自许可，见[第三方声明](THIRD_PARTY_NOTICES.md)与[图片来源](docs/images/README.md)。项目不授予无权许可的第三方专利权。
+NijiFrame 自有代码采用 [GPL-3.0-only](LICENSE)。第三方组件保留各自许可，见[第三方声明](THIRD_PARTY_NOTICES.md)。项目不授予无权许可的第三方专利权。
