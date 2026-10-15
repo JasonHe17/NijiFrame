@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-only
-name: Android foundation
+name: Android checks
 on:
   push:
   pull_request:
@@ -19,6 +19,9 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+        with:
+          packages: platform-tools
       - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3; validates wrapper
       - name: Install declared Android components
         run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'ndk;28.2.13676358' 'cmake;3.22.1'
@@ -29,7 +32,22 @@ jobs:
           cmake -S image-core/src/main/cpp -B build/native -DCMAKE_BUILD_TYPE=Debug
           cmake --build build/native
           ctest --test-dir build/native --output-on-failure
+      - name: Retain APK and build reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: android-build-${{ github.sha }}
+          retention-days: 7
+          path: |
+            app/build/outputs/apk/debug/*.apk
+            app/build/reports/lint-results-debug.*
+            editor-core/build/reports/tests/
+            build/native/Testing/
   emulator:
+    strategy:
+      fail-fast: false
+      matrix:
+        api: [29, 36]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -38,17 +56,46 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+        with:
+          packages: platform-tools
       - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
       - name: Install SDK and emulator
-        run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'ndk;28.2.13676358' 'cmake;3.22.1' 'emulator' 'system-images;android-36;default;x86_64'
+        run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'ndk;28.2.13676358' 'cmake;3.22.1' 'emulator' 'system-images;android-${{ matrix.api }};default;x86_64'
       - name: Run Android file and rendering checks
         shell: bash
         run: |
           sudo chmod a+rw /dev/kvm
-          echo no | avdmanager create avd --name ci --package 'system-images;android-36;default;x86_64'
-          "$ANDROID_HOME/emulator/emulator" -avd ci -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect > emulator.log 2>&1 &
-          trap 'adb emu kill || true' EXIT
-          timeout 180 adb wait-for-device
-          timeout 180 bash -c 'until [ "$(adb shell getprop sys.boot_completed | tr -d "\r")" = 1 ]; do sleep 2; done'
+          export ANDROID_USER_HOME="$RUNNER_TEMP/android-user"
+          export ANDROID_EMULATOR_HOME="$ANDROID_USER_HOME"
+          export ANDROID_AVD_HOME="$ANDROID_USER_HOME/avd"
+          mkdir -p "$ANDROID_AVD_HOME"
+          echo no | avdmanager create avd --name ci --device pixel_6 --path "$ANDROID_AVD_HOME/ci.avd" --package 'system-images;android-${{ matrix.api }};default;x86_64'
+          test -f "$ANDROID_AVD_HOME/ci.ini"
+          "$ANDROID_HOME/emulator/emulator" -avd ci -port 5554 -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect > emulator.log 2>&1 &
+          niji_emulator_pid=$!
+          trap 'adb emu kill || true; kill "$niji_emulator_pid" 2>/dev/null || true' EXIT
+          for attempt in {1..90}; do
+            if ! kill -0 "$niji_emulator_pid" 2>/dev/null; then cat emulator.log; exit 1; fi
+            if [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = 1 ]; then break; fi
+            sleep 2
+          done
+          test "$(adb shell getprop sys.boot_completed | tr -d '\r')" = 1
           adb shell input keyevent 82
-          ./gradlew :app:connectedDebugAndroidTest
+          adb shell settings put global window_animation_scale 0
+          adb shell settings put global transition_animation_scale 0
+          adb shell settings put global animator_duration_scale 0
+          if ./gradlew :app:connectedDebugAndroidTest; then niji_test_status=0; else niji_test_status=$?; fi
+          adb pull /sdcard/Download/nijiframe-test-evidence app/build/ui-evidence || true
+          exit "$niji_test_status"
+      - name: Retain Android test evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: android-api-${{ matrix.api }}-${{ github.sha }}
+          retention-days: 7
+          path: |
+            emulator.log
+            app/build/reports/androidTests/
+            app/build/outputs/androidTest-results/
+            app/build/ui-evidence/

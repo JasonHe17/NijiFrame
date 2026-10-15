@@ -24,7 +24,7 @@ class ProjectTest {
 
     @Test fun roundTripRetainsOriginalAndEditableState() {
         val original = project()
-        val p = original.copy(manifest = original.manifest.copy(edit = Edit(1.25f, 0.5f, 3, Crop(2, 1, 4, 2))))
+        val p = original.copy(manifest = original.manifest.copy(edit = Edit(1.25f, 0.5f, 3, Crop(1, 2, 2, 4))))
         val restored = ProjectIO.read(archive(p).inputStream())
         assertEquals(p.manifest, restored.manifest)
         assertArrayEquals(original.original, restored.original)
@@ -38,7 +38,7 @@ class ProjectTest {
         h.commit(h.current); assertEquals(Edit(1f), h.undo())
     }
     @Test fun unsupportedVersionsAndOperationsFail() {
-        rejects(custom(project().manifest.copy(version = 2)))
+        rejects(custom(project().manifest.copy(version = 99)))
         rejects(custom(project().manifest.copy(pipeline = "future-retouch")))
     }
     @Test fun invalidResourceAndDigestFail() {
@@ -67,6 +67,19 @@ class ProjectTest {
     @Test fun resourceBoundIsEnforcedDuringRead() {
         assertThrows(IllegalArgumentException::class.java) { ProjectIO.readBounded(ByteArray(33).inputStream(), 32) }
     }
+    @Test fun compressedResourcesRetainBulkWritesAtTheStorageBoundary() {
+        val bytes=ByteArray(64*1024).also {java.util.Random(1).nextBytes(it)}
+        val output=object : OutputStream() {
+            var singleWrites=0
+            var bulkBytes=0
+            override fun write(value: Int) {singleWrites++}
+            override fun write(buffer: ByteArray,offset: Int,length: Int) {bulkBytes+=length}
+        }
+        ProjectIO.write(ProjectIO.create(bytes,100,100),output)
+        assertTrue("ZIP payload must not become per-byte storage calls",output.singleWrites<1024)
+        assertTrue("The incompressible source should be sent in blocks",output.bulkBytes>bytes.size/2)
+    }
+
     @Test fun failedSavePreservesPreviousProjectAndCleansTemporaryFile() {
         val directory = Files.createTempDirectory("nijiframe-test").toFile()
         try {

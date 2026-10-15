@@ -1,39 +1,40 @@
-# Foundation validation
+# Basic editor verification
 
-The foundation covers import → parameter edits → project save → reopen → full-size export. It does not validate portrait retouching quality, Windows handoff, or phone performance.
+## Repeatable checks
 
-## Automated checks
+| Check | Scope |
+| --- | --- |
+| `:editor-core:test` | v1/v2 resource and parameter round-trip, source hashes, unsupported/corrupt ZIP rejection, history branches, failed-write recovery, geometry bounds/crop handles, no-upscale export dimensions, independent projects, rename/duplicate/delete and migration |
+| Native CTest | Neutral identity, known linear-light EV, saturation and warmth, clipping/invalid values, constant-image and impulse sharpening, radial vignette symmetry and strip equivalence, ASan/UBSan |
+| `EditorIntegrationTest` | Real Android ContentResolver/decoders/JNI, self-contained reopen after source deletion, all eight EXIF orientations, geometry and PNG dimensions, grayscale JPEG/GPS omission, sharpening strip seams, cancellation, latest-preview ownership, provider failures and automatic-save/new-viewmodel recovery |
+| `EditorUiTest` | Real system picker, pinch/pan/fit, draft cancel/apply, activity recreation, undo/redo, drag crop, flip, system Back with pending edits, landscape and portrait, PNG picker export and decoded pixels/dimensions, sharesheet, project duplicate/delete/rename/reopen |
+| `:app:lintDebug`, `:app:assembleDebug` | Android static analysis and both configured native ABIs |
 
-- `:editor-core:test`: resource and parameter round-trip, undo/redo branching, unsupported versions and operations, hashes, path rejection, truncated ZIP and special entries, bounds, and failed-write recovery.
-- Native CTest: neutral identity, a known linear-light EV value, grayscale saturation, endpoint clipping and invalid inputs under AddressSanitizer/UndefinedBehaviorSanitizer.
-- `:app:connectedDebugAndroidTest`: synthetic images through Android ContentResolver, actual decoding and JNI, saving and reopening after external-source deletion, portable project reading, JPEG output dimensions and grayscale pixels, metadata omission, all eight EXIF orientations, cancellation and transparency rejection; rapid edit/undo/redo verifies the latest preview wins, and a failed provider export/import preserves the recovery copy and current session. These tests require API 29+ storage APIs and currently run on API 36.
-- `:app:lintDebug` and `:app:assembleDebug`: Android static checks and both configured ABIs. Dependency-update and KTX-style suggestions are not suppressed.
+Use a dedicated test installation: the Gradle runner installs/uninstalls APKs, so export any projects that must survive a test run.
 
-The checked-in GitHub Actions workflow runs these on Linux and an API 36 x86_64 emulator. A remote CI result exists only after the workflow is actually triggered in a hosted repository.
+The UI test uses synthetic images and the actual system picker; it does not inject fake activity results or disable rendering. Accessibility locators are refreshed at interaction boundaries to avoid using stale nodes after Compose/DocumentUI updates. It uses UIAutomator 2.4.0. API 34+ accessibility-cache clearing is confined to test code. Runtime behavior does not depend on testing switches.
 
-## Manual acceptance
+GitHub Actions runs Linux build/native checks and API 29/36 Android jobs. Workflow reports, APKs, and available UI evidence are retained as artifacts for seven days. Always inspect checks on the commit being reviewed; a configuration file alone is not proof that remote CI passed.
 
-Use synthetic or appropriately licensed images; do not add personal photographs to the repository.
+## Manual acceptance and process recovery
 
-1. Import a JPEG/opaque PNG using the system document picker. Test an unsupported file and verify that the previous editing session survives.
-2. Pinch and pan the preview, then reset its view. Drag exposure/saturation; the preview updates after a short debounce, and completing a gesture creates one undo entry. Undo/redo, change direction after undo, compare to the original, crop and rotate.
-3. Save the project. Force-stop the application and launch it again. Verify parameters and output geometry survive. Unsaved changes must be clearly indicated.
-4. Export `.nijiproj` through the system picker. Import another photo, then open the saved archive. Verify the previous source and parameters return, even after removing the external source file.
-5. Export JPEG through the system picker. Decode the exported file independently and compare dimensions and representative pixels. Check that GPS metadata is absent.
-6. Cancel pickers and provoke a denied/unwritable destination. Verify no success is reported and the saved project remains recoverable. A provider may leave a partial document; retry using a new destination.
+Use synthetic or appropriately licensed images. Never commit private photographs or local machine records.
 
-## Coverage limits
+1. Import through the system picker. Cancel selection, try unsupported content, and ensure the current saved project remains available.
+2. Drag a slider, cancel the tool, then repeat and apply. Undo/redo; create a new branch after undo. Check before/after comparison and reset confirmation.
+3. Zoom, pan and fit the view. Crop with corner handles, move the selection, use free/fixed ratios, rotate/flip and straighten. Inspect output corners and ensure the crop tracks transformed coordinates.
+4. Wait for “已保存”, force-stop the process, then launch again. The original and committed parameters must return. A draft labeled “调整待应用” is intentionally not durable.
+5. Return home; rename, duplicate and edit a copy. Check that the original project remains unchanged. Cancel and then confirm deletion; external originals and exports must survive.
+6. Export portable project and JPEG/PNG photos through the picker; inspect outputs independently. Change quality/size and verify no upscaling. Reopen a project after removing the original external file.
+7. Share the rendered photo through Android's chooser; only the generated cache photo receives temporary read access. Force a provider failure or cancel work and verify the private project remains recoverable.
+8. Check short/wide layouts, larger text, labels and touch targets. Rotate/recreate the activity while a tool draft exists. Confirm the draft remains available for application or cancellation.
 
-The first local run uses Linux x86_64 and Android 16/API 36 x86_64. Arm64 is built, not executed on a phone. API 26 is the provisional minimum configuration, not a tested device matrix. The current 8 MP / 32 MiB input limits are conservative implementation limits pending real-device measurements; memory exhaustion is reported but cannot guarantee that Android will never kill the process under pressure.
+## Coverage and limitations
 
-UI appearance, accessibility and provider behavior need broader device/user review. Only a centered square crop is exposed. Portrait algorithms, masks, automatic regions and Windows UI are future work. Patent review continues when concrete portrait algorithms or distinctive interactions are selected; the dependency inventory is not an FTO opinion.
+Local checks use Linux x86_64 and Android 16/API 36 x86_64. Arm64 APK content is compiled; it has not been exercised on a phone. The declared API 26 minimum is not a tested device matrix. GitHub API 29/36 jobs provide separate hosted evidence when completed successfully. There are no Windows execution or physical-device performance claims.
 
-## Local foundation result (2026-10-14–15)
+The 8 MP / 32 MiB limits are current implementation bounds, not a promise of responsive operation on every phone. Native processing is cancellable between strips; platform decoder/provider I/O has platform-dependent cancellation latency. Saving uses synchronized file contents and atomic replacement, not a guarantee against all storage hardware failures. External providers can leave partial destinations on failure.
 
-- Nine JVM tests, four API 36 instrumentation tests and one native sanitizer test passed.
-- APK build and Android Lint succeeded from both the working repository and an independent source directory using documented SDK/JDK environment variables. Lint reported zero errors; remaining suggestions concern dependency versions and KTX style.
-- Manual system-picker flow passed: photo import, slider edits, crop/rotation, private save, force-stop/relaunch, portable export/open after deleting the external source, and JPEG export. Original bytes and saved parameters matched independently inspected archives.
-- The synthetic 960×640 fixture produced a 640×640 crop/rotation export. Against an independent linear-sRGB calculation, JPEG mean absolute channel error was 0.517/255, 99th percentile 2/255, maximum 91/255 at sharp color edges (lossy JPEG); GPS metadata was absent. These numbers describe this fixture, not a general image-quality guarantee.
-- The system picker initially appended `.zip`; the final export uses a binary MIME type and was verified to preserve `.nijiproj`, then reopened successfully.
-- The final manifest has no Internet or broad storage permissions. The generated Gradle wrapper JAR hash matches the official 8.13 wrapper checksum; distribution downloads also verify their pinned SHA-256.
-- GitHub-hosted CI, physical phones, other Android API levels and Windows were not run.
+UI checks cover touch/accessibility labels and reconfiguration, not a complete TalkBack audit or real-user study. Images are SDR/sRGB and opaque; new formats need explicit decoder/color tests. Portrait algorithms and regional edits remain future work; feature implementation or a dependency license is not patent clearance.
+
+Historical foundation verification is preserved in Git history. Current v2 crop coordinates and project-library behavior are documented in `project-format.md` and must be used for new regression fixtures.

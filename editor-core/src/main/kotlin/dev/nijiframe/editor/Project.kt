@@ -8,40 +8,62 @@ data class Crop(val x: Int, val y: Int, val width: Int, val height: Int)
 
 @Serializable
 data class Edit(val exposureEv: Float = 0f, val saturation: Float = 1f,
-                val turns: Int = 0, val crop: Crop? = null) {
-    fun validate(width: Int, height: Int) {
+                val turns: Int = 0, val crop: Crop? = null,
+                val contrast: Float = 0f, val highlights: Float = 0f, val shadows: Float = 0f,
+                val whites: Float = 0f, val blacks: Float = 0f, val warmth: Float = 0f,
+                val tint: Float = 0f, val vibrance: Float = 0f,
+                val sharpen: Float = 0f, val vignette: Float = 0f,
+                val flipHorizontal: Boolean = false, val flipVertical: Boolean = false,
+                val straighten: Float = 0f) {
+    fun validate(width: Int, height: Int, sourceCrop: Boolean = false) {
         require(exposureEv.isFinite() && exposureEv in -3f..3f) { "Invalid exposure" }
         require(saturation.isFinite() && saturation in 0f..2f) { "Invalid saturation" }
+        require(listOf(contrast, highlights, shadows, whites, blacks, warmth, tint, vibrance, vignette)
+            .all { it.isFinite() && it in -1f..1f }) { "Invalid adjustment" }
+        require(sharpen.isFinite() && sharpen in 0f..2f) { "Invalid sharpening" }
+        require(straighten.isFinite() && straighten in -45f..45f) { "Invalid straighten angle" }
         require(turns in 0..3) { "Invalid rotation" }
+        val cropWidth = if (!sourceCrop && turns % 2 == 1) height else width
+        val cropHeight = if (!sourceCrop && turns % 2 == 1) width else height
         crop?.let {
             require(it.x >= 0 && it.y >= 0 && it.width > 0 && it.height > 0 &&
-                it.x.toLong() + it.width <= width && it.y.toLong() + it.height <= height) { "Invalid crop" }
+                it.x.toLong() + it.width <= cropWidth && it.y.toLong() + it.height <= cropHeight) { "Invalid crop" }
         }
     }
 }
 
 @Serializable
 data class Manifest(
-    val version: Int = 1,
-    val pipeline: String = "srgb-tone-crop-turn-v1",
+    val version: Int = 2,
+    val pipeline: String = "srgb-basic-v2",
     val source: String = "assets/original",
     val sourceBytes: Int,
     val sourceSha256: String,
     val width: Int,
     val height: Int,
-    val edit: Edit = Edit()
+    val edit: Edit = Edit(),
+    val name: String = "Untitled"
 ) {
     fun validate() {
-        require(version == 1 && pipeline == "srgb-tone-crop-turn-v1") { "Unsupported project version or operation" }
+        require((version == 1 && pipeline == "srgb-tone-crop-turn-v1") ||
+            (version == 2 && pipeline == "srgb-basic-v2")) { "Unsupported project version or operation" }
+        require(name.isNotBlank() && name.length <= 80 && name.none { it.isISOControl() }) { "Invalid project name" }
+        if (version == 1) require(edit == Edit(edit.exposureEv, edit.saturation, edit.turns, edit.crop)) {
+            "Version 1 cannot contain new operations"
+        }
         require(source == "assets/original" && sourceBytes in 1..ProjectIO.MAX_SOURCE_BYTES) { "Invalid resource" }
         require(sourceSha256.matches(Regex("[0-9a-f]{64}"))) { "Invalid resource digest" }
         require(width > 0 && height > 0 && width.toLong() * height <= MAX_PIXELS) { "Unsupported image dimensions" }
-        edit.validate(width, height)
+        edit.validate(width, height, sourceCrop = version == 1)
     }
+    fun current(): Manifest = if (version == 1) copy(version = 2, pipeline = "srgb-basic-v2",
+        edit = edit.copy(crop = edit.crop?.let { Geometry.legacyCrop(it,width,height,edit.turns) })) else this
     companion object { const val MAX_PIXELS = 8_000_000L }
 }
 
-data class Project(val manifest: Manifest, val original: ByteArray)
+data class Project(val manifest: Manifest, val original: ByteArray) {
+    fun withEdit(edit: Edit): Project = copy(manifest = manifest.copy(version = 2, pipeline = "srgb-basic-v2", edit = edit))
+}
 
 /** History contains parameters only. A completed gesture contributes one entry. */
 class History(initial: Edit = Edit()) {

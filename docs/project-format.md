@@ -1,56 +1,49 @@
-# Editable project format v1
+# Editable project format v2
 
-Status: implemented experimental format, not a stable interchange guarantee. Extension: `.nijiproj`. This formal format is independent of research prototypes.
+Status: implemented experimental processing contract, not a stable cross-platform guarantee. File extension `.nijiproj`; Android document export uses `application/octet-stream` to preserve this extension.
 
-## Container
+## Container and validation
 
-ZIP containing exactly two regular files, without a ZIP comment, encryption, ZIP64 or multiple disks:
+ZIP has exactly `project.json` (UTF-8 JSON, at most 16 KiB) and `assets/original` (unchanged encoded image, at most 32 MiB). Complete archive limit: 33 MiB. Reading validates the central directory and paths, regular-file modes, payload CRCs, length, SHA-256, operation version and numerical bounds. Duplicate/unexpected paths, comments, ZIP64, encryption, missing resources and incomplete archives fail. No archive paths are extracted to the filesystem.
 
-- `project.json`: UTF-8 JSON, at most 16 KiB.
-- `assets/original`: unchanged encoded JPEG or PNG, at most 32 MiB.
+The manifest contains `version: 2`, `pipeline: "srgb-basic-v2"`, `source: "assets/original"`, `sourceBytes`, lowercase `sourceSha256`, source-oriented `width` / `height`, a project `name` (1–80 characters, no control characters), and `edit`. Unknown fields and unsupported operations are rejected. Original source dimensions are at most 8,000,000 pixels after EXIF normalization; the decoded resource must match. Platform URIs and filesystem paths are never portable identifiers.
 
-The complete ZIP is limited to 33 MiB. Reading validates its central directory, local paths, payload CRCs, exact entry set and SHA-256. Duplicate paths, special-file modes, traversal, incomplete archives, missing resources and unexpected entries are rejected. Nothing is extracted to filesystem paths from the package.
+## Edit parameters and order
 
-Example manifest (the digest is a placeholder):
+| Parameter | Default / range | Meaning |
+| --- | --- | --- |
+| exposureEv | 0 / [-3,3] | Linear sRGB gain `2^EV` |
+| contrast | 0 / [-1,1] | Linear contrast gain `2^contrast`, pivot 0.18 |
+| shadows, highlights, whites, blacks | 0 / [-1,1] each | Smooth luminance-weighted lifts described below |
+| warmth, tint | 0 / [-1,1] each | Relative channel gains, not a calibrated Kelvin temperature |
+| saturation | 1 / [0,2] | Linear-light chroma multiplier |
+| vibrance | 0 / [-1,1] | Saturation multiplier weighted toward lower existing chroma |
+| straighten | 0 / [-45,45] degrees | Center rotation with automatic scale to cover the full source frame |
+| flipHorizontal, flipVertical | false | Source-axis flips after straightening |
+| turns | 0 / integer 0..3 | Clockwise quarter-turns after flips |
+| crop | null | Half-open integer rectangle in the full transformed image; null means full image |
+| sharpen | 0 / [0,2] | Unsharp amount using a 3×3 Gaussian stencil in encoded RGB |
+| vignette | 0 / [-1,1] | Radial exposure falloff; positive darkens corners |
 
-```json
-{
-  "version": 1,
-  "pipeline": "srgb-tone-crop-turn-v1",
-  "source": "assets/original",
-  "sourceBytes": 12345,
-  "sourceSha256": "<64 lowercase hexadecimal characters>",
-  "width": 1600,
-  "height": 1200,
-  "edit": {
-    "exposureEv": 0.5,
-    "saturation": 1.1,
-    "turns": 1,
-    "crop": {"x": 200, "y": 0, "width": 1200, "height": 1200}
-  }
-}
-```
+1. Decode opaque 8-bit SDR/sRGB, normalize EXIF orientation once and retain original encoded bytes. Current supported input remains JPEG/opaque PNG; transparency, detected HDR and unsupported color spaces fail explicitly.
+2. Decode each sRGB channel to linear light with the standard 0.04045/12.92, 0.055/1.055, 2.4 transfer function, then apply exposure.
+3. Let `Y = clamp(0.2126 R + 0.7152 G + 0.0722 B, 0, 1)`, `S=(1-Y)^2`, `H=Y^2`. The additive lift is `0.25*(shadows*S + highlights*H + whites*H^2) + 0.15*blacks*S^2`. Apply lift and contrast about 0.18, flooring negative values at zero.
+4. Multiply R/G/B respectively by `2^(0.4*warmth)`, `2^(-0.3*tint)`, `2^(-0.4*warmth)`. With `chroma=(max-min)/max` (zero at black), effective saturation is `saturation*(1+vibrance*(1-chroma))`. Mix each channel around its linear luminance, clip [0,1], apply inverse sRGB transfer, and round to nearest 8-bit value. If all new tone parameters are zero, use the exact v1 tone path; neutral tone is decoded-pixel identity.
+5. Straighten around the full image center. With `a=abs(angle)`, cover scale is `max(cos(a)+sin(a)*height/width, cos(a)+sin(a)*width/height)`. Output size remains source width/height; resampling is bilinear. Apply the two source-axis flips, then quarter-turn rotation.
+6. Apply `crop` in these transformed coordinates. Changing rotation or display-axis flip in the UI transforms the crop rectangle correspondingly to preserve the selected content. A new crop selection is made directly over the transformed image.
+7. Sharpen encoded RGB with `source + amount*(source - gaussian3x3(source))`, clamped and rounded. Gaussian weights are the outer product of [1,2,1]/4; edge neighbors clamp. Strip processing includes a one-row halo and matches whole-image processing.
+8. For vignette, normalize x/y to [-1,1] (0 on a singleton axis), `r=(x^2+y^2)/2`; apply linear-light gain `2^(-1.5*vignette*r^2)`, then encode. Its center and extent are the final cropped frame.
 
-Dimensions describe the image **after EXIF orientation**, at most 8,000,000 pixels. They must match the decoded resource. Unknown fields, versions and pipeline identifiers fail instead of being silently ignored. No platform URI, device identifier or absolute path is stored.
+Preview reduces the full authoritative result to a maximum side of 1600 pixels. Export optionally downsizes after all operations without upscaling; supports JPEG quality 1–100 and lossless PNG. Source metadata is not copied into rendered exports; portable projects retain it in the original resource.
 
-## Pipeline semantics
+## v1 migration
 
-1. Decode opaque 8-bit sRGB SDR source. Normalize all eight EXIF orientations once; retain the encoded original unmodified. Wide-gamut input, transparent pixels, non-8-bit PNG and detected HDR gain maps are rejected. Android decoder behavior on additional formats/devices is not a compatibility promise.
-2. Convert each sRGB channel `s` in [0,1] to linear light: `s/12.92` when `s <= 0.04045`, otherwise `((s+0.055)/1.055)^2.4`.
-3. Multiply linear RGB by `2^exposureEv`, where EV is [-3,3]. Compute `Y = 0.2126 R + 0.7152 G + 0.0722 B`. Saturation in [0,2] maps each channel to `Y + saturation * (channel-Y)`.
-4. Clip to [0,1], apply the inverse sRGB transfer function, round to the nearest 8-bit value. Neutral tone is bit-exact on decoded pixels.
-5. Crop a half-open integer rectangle `[x,y,width,height]` in the source-oriented coordinates; `null` means full image. Then rotate clockwise by `turns * 90°`, where turns is 0..3. Pointwise tone may be evaluated only inside the crop because it commutes with this crop.
+Read the v1 `srgb-tone-crop-turn-v1` pipeline with its original source-coordinate crop, exposure, saturation and turns. All v2-only controls must be neutral in a v1 manifest. Convert the old crop rectangle into the quarter-turned full-image coordinate system, then upgrade to v2. This gives the same output for the supported v1 operations; never silently change a crop or drop an effect. New saves use v2. Older apps are expected to reject v2 rather than pretend it is editable.
 
-The UI currently exposes a centered square crop; the format and renderer accept any validated integer rectangle. No masks, portrait effects or required models exist in v1. Adding these requires a documented version/compatibility decision.
+## Local persistence boundary
 
-The full-resolution render is authoritative. Preview is reduced from that render to a maximum side of 1600 pixels. Photo export separately encodes full output dimensions as JPEG quality 95. Export intentionally does not transfer original metadata; the project still contains the original metadata in its embedded source.
+The platform-independent library assigns private UUID filenames and stores one self-contained archive per project. Listing reads bounded manifest metadata, while opening validates the full package. Renaming, duplicating and deleting projects operate on these private identifiers, not user-controlled paths. An old single recovery file is migrated with a deterministic identity and marker; migration preserves the old file and is retry-safe.
 
-## Save and recovery
+Each archive save writes a same-directory temporary file, finishes ZIP output, syncs the file and atomically replaces the destination. A failed write preserves the previous complete archive. The last-project pointer is updated separately and can fall back to existing projects. This is process-interruption recovery, not a universal device power-loss guarantee. Android automatically saves committed edits after a short debounce, saves before opening export destinations, and exposes durable-save status/retry. Tool drafts remain transient until applied.
 
-One current project is stored privately by the Android app. Save writes a same-directory temporary file, finishes the ZIP, syncs file contents and atomically replaces the destination. Failed writes leave the previous complete file; leftover temporary files are not used for recovery. This provides process-interruption recovery, not a guarantee against every filesystem or device power-loss failure.
-
-Startup restores the last successful save. Editing or importing without saving does not promise crash recovery. Undo/redo history is in-memory, contains only parameters, and is not persisted; restored parameters remain editable. Saving a new project replaces the single recovery slot, so use portable exports to retain multiple projects.
-
-System document providers do not promise atomic replacement. Both export actions first commit an internal recoverable project and then write the newly chosen document. A failed provider write can leave a partial destination; the UI reports failure and the saved internal project remains available for retry. The original external photo is never overwritten by application code.
-
-Windows compatibility and format stabilization require independent runtime checks. A Linux JVM or C++ build is not evidence of Windows handoff.
+System document providers do not guarantee atomic replacement. Keep a valid private project before external export; errors may leave a partial destination, which must not be reported as success. History stores parameters only; cross-session full undo history remains optional. Actual Windows execution and cross-decoder numerical comparisons are deferred.

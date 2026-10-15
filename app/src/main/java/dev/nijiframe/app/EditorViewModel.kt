@@ -13,128 +13,280 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
+enum class EditorTool(val label: String) {
+    LIGHT("明暗"), COLOR("颜色"), CROP("裁剪"), GEOMETRY("旋转"), DETAILS("细节"), LOOKS("预设")
+}
+enum class ExportDestination { PHOTO, PROJECT }
+data class SharedPhoto(val uri: Uri, val mime: String)
 data class EditorUi(
-    val project: Project? = null,
-    val preview: Bitmap? = null,
-    val busy: Boolean = false,
-    val rendering: Boolean = false,
-    val comparing: Boolean = false,
-    val dirty: Boolean = false,
-    val canUndo: Boolean = false,
-    val canRedo: Boolean = false,
-    val status: String = "导入一张照片，开始编辑",
-    val error: String? = null
+    val project: Project? = null, val projectId: String? = null,
+    val projects: List<ProjectLibrary.Entry> = emptyList(), val home: Boolean = true,
+    val preview: Bitmap? = null, val busy: Boolean = false, val saving: Boolean = false,
+    val rendering: Boolean = false, val comparing: Boolean = false, val dirty: Boolean = false,
+    val canUndo: Boolean = false, val canRedo: Boolean = false,
+    val tool: EditorTool? = null, val draft: Edit? = null, val cropAspect: Float? = null, val canCancel: Boolean = false,
+    val exportSettings: ExportSettings = ExportSettings(), val exportRequest: ExportDestination? = null, val sharedPhoto: SharedPhoto? = null,
+    val status: String = "导入照片，开始编辑", val error: String? = null
 )
 
-class EditorViewModel(application: Application) : AndroidViewModel(application) {
-    private val repository = ProjectRepository(application)
-    private val mutable = MutableStateFlow(EditorUi())
-    val ui = mutable.asStateFlow()
-    private var source: Bitmap? = null
-    private var history = History()
-    private var saved: Project? = null
-    private var renderJob: Job? = null
-    private val pixelWork = Mutex()
-    private var generation = 0L
-    init { if (repository.savedFile.exists()) restore() }
+class EditorViewModel @JvmOverloads constructor(application: Application,
+    private val repository: ProjectRepository = ProjectRepository(application)) : AndroidViewModel(application) {
+    private val preferences=application.getSharedPreferences("editor",0)
+    private val mutable=MutableStateFlow(EditorUi(exportSettings=ExportSettings(
+        format=runCatching { PhotoFormat.valueOf(preferences.getString("format","JPEG")!!) }.getOrDefault(PhotoFormat.JPEG),
+        quality=preferences.getInt("quality",95).coerceIn(1,100),
+        maxEdge=preferences.getInt("edge",0).takeIf { it in 64..16384 }
+    )))
+    val ui=mutable.asStateFlow()
+    private var source: Bitmap?=null
+    private var history=History()
+    private var savedManifest: Manifest?=null
+    private var renderJob: Job?=null
+    private var autoSaveJob: Job?=null
+    private var actionJob: Job?=null
+    private val pixelWork=Mutex()
+    private val saveWork=Mutex()
+    private val actions=Mutex()
+    private val initialized=CompletableDeferred<Unit>()
+    private var generation=0L
+    private var saveGeneration=0L
 
-    private fun io(status: String, action: suspend () -> Unit) {
-        if (mutable.value.busy) return
-        mutable.value = mutable.value.copy(busy = true, status = status, error = null)
+    init {
+        mutable.value=mutable.value.copy(busy=true,status="正在读取工程")
         viewModelScope.launch {
-            try { action() }
-            catch (cancelled: CancellationException) { throw cancelled }
-            catch (error: Exception) {
-                mutable.value = mutable.value.copy(error = when (error) {
-                    is SecurityException -> "没有文件访问权限，请重新选择文件"
-                    is java.io.IOException -> "文件读写失败，请检查文件、存储空间或访问权限后重试"
-                    else -> error.message?.takeIf { text -> text.any { it in '\u4e00'..'\u9fff' } }
-                        ?: "文件格式或内容不受支持，无法完成操作"
-                }, status = "操作未完成；原工程仍保留")
-            } catch (_: OutOfMemoryError) {
-                mutable.value = mutable.value.copy(rendering = false, error = "设备可用内存不足，请使用较小的图片", status = "操作未完成")
-            } finally { mutable.value = mutable.value.copy(busy = false) }
+            try {
+                val latest=withContext(Dispatchers.IO) { repository.prepare();repository.library.latest() }
+                refreshProjects()
+                if (latest != null) {
+                    val loaded=withContext(Dispatchers.IO) { repository.read(latest) }
+                    install(latest,loaded)
+                }
+            } catch (error: Exception) { fail(error) }
+            finally {
+                mutable.value=mutable.value.copy(busy=false,
+                    status=if(mutable.value.project==null && mutable.value.error==null) "导入照片，开始编辑" else mutable.value.status)
+                initialized.complete(Unit)
+            }
         }
     }
-    fun dismissError() { mutable.value = mutable.value.copy(error = null) }
-    fun importPhoto(uri: Uri) = load("正在导入照片", false) { repository.importPhoto(uri) }
-    fun open(uri: Uri) = load("正在读取工程", false) { repository.open(uri) }
-    fun restore() = load("正在恢复已存工程", true) { repository.restore() }
-    private fun load(status: String, restored: Boolean, read: () -> Pair<Project, Bitmap>) = io(status) {
-        renderJob?.cancelAndJoin()
-        val (project, bitmap) = try {
-            withContext(Dispatchers.IO) { pixelWork.withLock { read() } }
-        } catch (error: Exception) { render(); throw error }
-        source = bitmap
-        history = History(project.manifest.edit)
-        saved = if (restored) project else null
-        mutable.value = EditorUi(project = project, busy = true, dirty = !restored,
-            status = if (restored) "已恢复保存的工程" else "尚未保存工程")
+    private fun message(error: Exception): String = when(error) {
+        is SecurityException -> "没有文件访问权限，请重新选择文件"
+        is java.io.IOException -> "文件读写失败，请检查文件、存储空间或访问权限后重试"
+        else -> error.message?.takeIf { it.any { c -> c in '\u4e00'..'\u9fff' } }
+            ?: "文件格式或内容不受支持，无法完成操作"
+    }
+    private fun fail(error: Exception) { mutable.value=mutable.value.copy(error=message(error),status="操作未完成，已保存的工程仍保留") }
+    fun dismissError() { mutable.value=mutable.value.copy(error=null) }
+    fun cancelOperation() { actionJob?.cancel() }
+    private fun action(status: String, block: suspend () -> Unit) {
+        if (initialized.isCompleted && mutable.value.busy) return
+        actionJob=viewModelScope.launch {
+            initialized.await()
+            actions.withLock {
+                // Disable competing actions before waiting for an in-flight automatic save.
+                mutable.value=mutable.value.copy(busy=true,saving=false,status=status,error=null,canCancel=true)
+                try { autoSaveJob?.cancelAndJoin();block() }
+                catch (cancelled: CancellationException) { mutable.value=mutable.value.copy(status="操作已取消，工程已保留");throw cancelled }
+                catch (error: Exception) { fail(error) }
+                catch (_: OutOfMemoryError) { mutable.value=mutable.value.copy(error="可用内存不足，请使用较小图片",rendering=false) }
+                finally { mutable.value=mutable.value.copy(busy=false,canCancel=false);if (renderJob?.isCancelled == true && !mutable.value.home) render() }
+            }
+        }
+    }
+    private suspend fun refreshProjects() {
+        val projects=withContext(Dispatchers.IO) { repository.library.entries() }
+        mutable.value=mutable.value.copy(projects=projects)
+    }
+    private fun install(id: String, loaded: Pair<Project,Bitmap>) {
+        val (project,bitmap)=loaded
+        source=bitmap;history=History(project.manifest.edit);savedManifest=project.manifest
+        mutable.value=mutable.value.copy(project=project,projectId=id,home=false,preview=null,dirty=false,
+            canUndo=false,canRedo=false,tool=null,draft=null,cropAspect=null,comparing=false,status="所有修改已保存")
         render()
     }
+    fun importPhoto(uri: Uri) = openNew("正在导入照片") { repository.importPhoto(uri) }
+    fun open(uri: Uri) = openNew("正在读取工程") { repository.open(uri) }
+    private fun openNew(status: String, read: () -> Pair<Project,Bitmap>) = action(status) {
+        saveCurrentIfNeeded()
+        renderJob?.cancelAndJoin()
+        val loaded=withContext(Dispatchers.IO) { pixelWork.withLock { read() } }
+        val id=withContext(Dispatchers.IO) { repository.library.create(loaded.first) }
+        install(id,loaded);refreshProjects()
+    }
+    fun openProject(id: String) = action("正在读取工程") {
+        saveCurrentIfNeeded();renderJob?.cancelAndJoin()
+        val loaded=withContext(Dispatchers.IO) { pixelWork.withLock { repository.read(id).also { repository.library.markOpened(id) } } }
+        install(id,loaded)
+    }
+    fun restore() { val latest=mutable.value.projects.firstOrNull { !it.damaged }?.id; if (latest!=null) openProject(latest) }
+    fun home() = action("正在保存工程") {
+        saveCurrentIfNeeded();renderJob?.cancelAndJoin();refreshProjects()
+        mutable.value=mutable.value.copy(home=true,tool=null,draft=null,comparing=false,rendering=false,status="选择工程继续编辑")
+    }
+    fun renameProject(id: String, name: String) = action("正在重命名") {
+        saveCurrentIfNeeded()
+        withContext(Dispatchers.IO) { repository.library.rename(id,name) }
+        if (mutable.value.projectId==id) {
+            val updated=mutable.value.project!!.copy(manifest=mutable.value.project!!.manifest.copy(name=name.trim()))
+            savedManifest=updated.manifest;mutable.value=mutable.value.copy(project=updated)
+        }
+        refreshProjects();mutable.value=mutable.value.copy(status="名称已保存")
+    }
+    fun duplicateProject(id: String) = action("正在复制工程") {
+        saveCurrentIfNeeded();withContext(Dispatchers.IO) { repository.library.duplicate(id) };refreshProjects()
+        mutable.value=mutable.value.copy(status="已创建独立副本")
+    }
+    fun deleteProject(id: String) = action("正在删除工程") {
+        withContext(Dispatchers.IO) { repository.library.delete(id);repository.thumbnail(id).delete() }
+        if (mutable.value.projectId==id) {
+            renderJob?.cancelAndJoin();source=null;savedManifest=null
+            mutable.value=mutable.value.copy(project=null,projectId=null,preview=null,home=true,tool=null,draft=null,dirty=false,rendering=false)
+        }
+        refreshProjects();mutable.value=mutable.value.copy(status="工程已删除")
+    }
+    fun thumbnail(id: String)=repository.thumbnail(id)
+    fun beginTool(tool: EditorTool) {
+        if (mutable.value.busy || mutable.value.tool==tool) return
+        if (mutable.value.tool!=null) applyTool()
+        val edit=mutable.value.project?.manifest?.edit ?: return
+        mutable.value=mutable.value.copy(tool=tool,draft=edit,comparing=false)
+        render()
+    }
+    fun cropAspect(aspect: Float?) {
+        val project=mutable.value.project ?: return
+        val edit=mutable.value.draft ?: return
+        val (w,h)=Geometry.canvasSize(project.manifest.width,project.manifest.height,edit.turns)
+        mutable.value=mutable.value.copy(cropAspect=aspect)
+        updateDraft(edit.copy(crop=Geometry.centeredCrop(w,h,aspect)))
+    }
+    fun updateDraft(edit: Edit) {
+        val project=mutable.value.project ?: return
+        edit.validate(project.manifest.width,project.manifest.height)
+        val previous=mutable.value
+        mutable.value=previous.copy(draft=edit,comparing=false)
+        // Crop handles change the overlay only; the full transformed photo underneath is unchanged.
+        if (previous.tool!=EditorTool.CROP || previous.comparing ||
+            previous.draft?.copy(crop=null)!=edit.copy(crop=null)) render(debounce=true)
+    }
+    fun applyTool() {
+        val draft=mutable.value.draft ?: return
+        mutable.value=mutable.value.copy(tool=null,draft=null)
+        commit(draft)
+    }
+    fun cancelTool() { mutable.value=mutable.value.copy(tool=null,draft=null,comparing=false);render() }
     fun commit(edit: Edit) {
         if (mutable.value.busy) return
-        val project = mutable.value.project ?: return
-        edit.validate(project.manifest.width, project.manifest.height)
-        history.commit(edit)
-        publishEdit(history.current)
+        val project=mutable.value.project ?: return
+        edit.validate(project.manifest.width,project.manifest.height)
+        history.commit(edit);publishEdit(history.current)
     }
-    fun undo() { if (!mutable.value.busy) publishEdit(history.undo()) }
-    fun redo() { if (!mutable.value.busy) publishEdit(history.redo()) }
+    fun undo() { if (!mutable.value.busy && mutable.value.tool==null) publishEdit(history.undo()) }
+    fun redo() { if (!mutable.value.busy && mutable.value.tool==null) publishEdit(history.redo()) }
     private fun publishEdit(edit: Edit) {
-        val project = mutable.value.project ?: return
-        val updated = project.copy(manifest = project.manifest.copy(edit = edit))
-        val dirty = saved?.manifest != updated.manifest
-        mutable.value = mutable.value.copy(project = updated, dirty = dirty, comparing = false,
-            canUndo = history.canUndo, canRedo = history.canRedo,
-            status = if (dirty) "有未保存的修改" else "工程已保存")
-        render()
+        val project=mutable.value.project ?: return
+        val updated=project.withEdit(edit)
+        mutable.value=mutable.value.copy(project=updated,dirty=savedManifest!=updated.manifest,comparing=false,
+            canUndo=history.canUndo,canRedo=history.canRedo,status="正在等待自动保存")
+        render();scheduleSave()
     }
-    fun previewEdit(edit: Edit) {
-        if (mutable.value.busy) return
-        mutable.value = mutable.value.copy(comparing = false)
-        render(edit, true)
-    }
-    fun compare() {
-        mutable.value = mutable.value.copy(comparing = !mutable.value.comparing)
-        render()
-    }
-    private fun render(draft: Edit? = null, debounce: Boolean = false) {
+    // Kept as a direct preview boundary for sliders outside a tool transaction.
+    fun previewEdit(edit: Edit) { if (!mutable.value.busy) render(edit,true) }
+    fun compare() { mutable.value=mutable.value.copy(comparing=!mutable.value.comparing);render() }
+    private fun render(temporary: Edit?=null, debounce: Boolean=false) {
         renderJob?.cancel()
-        val project = mutable.value.project ?: return
-        val original = source ?: return
-        val parameters = if (mutable.value.comparing) Edit() else draft ?: project.manifest.edit
-        val ticket = ++generation
-        mutable.value = mutable.value.copy(rendering = true)
-        renderJob = viewModelScope.launch {
+        val state=mutable.value
+        val project=state.project ?: return
+        val original=source ?: return
+        var parameters=temporary ?: state.draft ?: project.manifest.edit
+        if (state.tool==EditorTool.CROP) parameters=parameters.copy(crop=null)
+        if (state.comparing) parameters=Look.NEUTRAL.apply(parameters)
+        val ticket=++generation
+        mutable.value=mutable.value.copy(rendering=true)
+        renderJob=viewModelScope.launch {
             try {
                 if (debounce) delay(80)
-                val bitmap = withContext(Dispatchers.Default) {
-                    pixelWork.withLock { ImagePipeline.preview(ImagePipeline.render(original, parameters)) }
+                val bitmap=withContext(Dispatchers.Default) {
+                    pixelWork.withLock { ImagePipeline.preview(ImagePipeline.render(original,parameters)) }
                 }
-                if (ticket == generation) mutable.value = mutable.value.copy(preview = bitmap, rendering = false)
+                if (ticket==generation) {
+                    mutable.value=mutable.value.copy(preview=bitmap,rendering=false)
+                    if (state.tool==null && !state.comparing && state.projectId!=null) {
+                        withContext(Dispatchers.IO) { runCatching { repository.saveThumbnail(state.projectId,bitmap) } }
+                    }
+                }
             } catch (cancelled: CancellationException) { throw cancelled }
-            catch (error: Exception) { mutable.value = mutable.value.copy(rendering = false, error = error.message ?: "预览失败") }
-            catch (_: OutOfMemoryError) { mutable.value = mutable.value.copy(rendering = false, error = "预览内存不足，请使用较小图片") }
+            catch (error: Exception) { mutable.value=mutable.value.copy(rendering=false,error=message(error)) }
+            catch (_: OutOfMemoryError) { mutable.value=mutable.value.copy(rendering=false,error="预览内存不足，请使用较小图片") }
         }
     }
-    fun save() = io("正在保存工程") { saveCurrent() }
-    private suspend fun saveCurrent(): Project {
-        val project = requireNotNull(mutable.value.project)
-        withContext(Dispatchers.IO) { repository.save(project) }
-        saved = project
-        mutable.value = mutable.value.copy(dirty = false, status = "工程已保存在应用中")
-        return project
+    private fun scheduleSave() {
+        autoSaveJob?.cancel()
+        val ticket=++saveGeneration
+        val project=mutable.value.project ?: return
+        val id=mutable.value.projectId ?: return
+        mutable.value=mutable.value.copy(saving=true)
+        autoSaveJob=viewModelScope.launch {
+            try {
+                delay(300)
+                persist(id,project)
+                if (mutable.value.projectId==id && mutable.value.project?.manifest==project.manifest) {
+                    savedManifest=project.manifest
+                    mutable.value=mutable.value.copy(dirty=false,status="所有修改已保存")
+                }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (error: Exception) { mutable.value=mutable.value.copy(error=message(error),status="自动保存失败，请重试保存") }
+            finally { if (ticket==saveGeneration) mutable.value=mutable.value.copy(saving=false) }
+        }
     }
-    fun exportProject(uri: Uri) = io("正在导出工程") {
-        val project = saveCurrent()
-        withContext(Dispatchers.IO) { repository.exportProject(project, uri) }
-        mutable.value = mutable.value.copy(status = "工程已导出，可重新打开继续编辑")
+    private suspend fun persist(id: String, project: Project) = withContext(Dispatchers.IO) {
+        saveWork.withLock { currentCoroutineContext().ensureActive();repository.library.save(id,project) }
     }
-    fun exportPhoto(uri: Uri) = io("正在导出完整尺寸照片") {
-        val project = saveCurrent()
-        val bitmap = requireNotNull(source)
-        withContext(Dispatchers.Default) { pixelWork.withLock { repository.exportPhoto(project, bitmap, uri) } }
-        mutable.value = mutable.value.copy(status = "JPEG 已导出；未复制位置等原图元数据")
+    private suspend fun saveCurrentIfNeeded() {
+        val project=mutable.value.project ?: return
+        val id=mutable.value.projectId ?: return
+        if (savedManifest!=project.manifest) {
+            persist(id,project);savedManifest=project.manifest
+            mutable.value=mutable.value.copy(dirty=false,status="所有修改已保存")
+        }
     }
+    fun save() = action("正在保存工程") { saveCurrentIfNeeded();mutable.value=mutable.value.copy(status="所有修改已保存") }
+    fun setExportSettings(settings: ExportSettings) {
+        mutable.value=mutable.value.copy(exportSettings=settings)
+        preferences.edit().putString("format",settings.format.name).putInt("quality",settings.quality)
+            .putInt("edge",settings.maxEdge ?: 0).apply()
+    }
+    fun prepareExport(destination: ExportDestination) = action("正在保存修改") {
+        saveCurrentIfNeeded()
+        val settings=mutable.value.exportSettings
+        withContext(Dispatchers.IO) {
+            check(preferences.edit().putString("format",settings.format.name).putInt("quality",settings.quality)
+                .putInt("edge",settings.maxEdge ?: 0).commit()) { "无法保存导出设置，请检查存储空间" }
+        }
+        mutable.value=mutable.value.copy(exportRequest=destination,status="请选择保存位置")
+    }
+    fun cancelExportSelection() {mutable.value=mutable.value.copy(status="已取消导出")}
+    fun consumeExportRequest() {mutable.value=mutable.value.copy(exportRequest=null)}
+    fun exportProject(uri: Uri) = action("正在导出工程") {
+        saveCurrentIfNeeded()
+        val project=requireNotNull(mutable.value.project)
+        withContext(Dispatchers.IO) { repository.exportProject(project,uri) }
+        mutable.value=mutable.value.copy(status="可编辑工程已导出")
+    }
+    fun exportPhoto(uri: Uri, format: PhotoFormat? = null) = action("正在导出照片") {
+        saveCurrentIfNeeded()
+        val state=mutable.value
+        withContext(Dispatchers.Default) { pixelWork.withLock {
+            repository.exportPhoto(requireNotNull(state.project),requireNotNull(source),uri,
+                state.exportSettings.copy(format=format ?: state.exportSettings.format))
+        }}
+        mutable.value=mutable.value.copy(status="照片已导出，未复制原图元数据")
+    }
+    fun sharePhoto() = action("正在准备分享") {
+        saveCurrentIfNeeded();val state=mutable.value
+        val uri=withContext(Dispatchers.Default) { pixelWork.withLock {
+            repository.sharePhoto(requireNotNull(state.project),requireNotNull(source),state.exportSettings)
+        }}
+        mutable.value=mutable.value.copy(sharedPhoto=SharedPhoto(uri,state.exportSettings.format.mime),status="照片已准备好")
+    }
+    fun consumeShare() { mutable.value=mutable.value.copy(sharedPhoto=null) }
 }

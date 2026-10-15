@@ -1,37 +1,48 @@
 # NijiFrame
 
-NijiFrame 是面向单人人像的本地修图开源项目，Android 先行，为后续 Windows 可编辑工程接力保留数据和像素处理边界。
+NijiFrame 是本地照片编辑开源项目，长期面向单人人像，先实现 Android 基础修图。当前开发版为 **0.2.0-dev**；Windows 接力保留工程与处理边界，人像特色工具仍属后续范围。
 
-当前已有可构建的基础编辑器：导入照片、缩放平移、曝光与饱和度、居中方形裁剪、90° 旋转、原图对比、撤销重做、保存／重开工程和导出照片。自然皮肤改善、局部蒙版及 Windows 客户端尚未实现。
+## 基础功能
 
-## 使用范围
+| 区域 | 已实现 |
+| --- | --- |
+| 工程主页 | 导入照片、打开可编辑工程、缩略图列表、重命名、创建独立副本、确认删除、恢复最近工程 |
+| 画布与交互 | 缩放、平移、双击缩放、适应画布、保留构图的原图对比、工具预览／应用／取消、撤销重做、横竖屏布局 |
+| 明暗与颜色 | 曝光、对比度、高光、阴影、白色、黑色、饱和度、鲜艳度、色温、色调 |
+| 构图 | 拖动自由裁剪、常用比例、移动裁剪框、90°旋转、水平／垂直翻转、角度校正 |
+| 细节与预设 | 锐化、暗角，以及原色、自然、暖调、冷调、黑白预设；参数可继续精调 |
+| 保存与分享 | 已应用修改自动保存、JPEG／PNG导出、JPEG质量与长边设置、系统分享、独立的`.nijiproj`工程导出 |
 
-- 支持 sRGB JPEG、8 位不透明 PNG；先应用 EXIF 方向，再编辑。当前临时限制为 800 万像素、32 MiB 原图，不代表已验证的真机能力。
-- 照片处理在本地运行，无账号、网络权限或模型下载。透明图、宽色域与已识别的 HDR 增益图会明确拒绝。
-- **保存工程**将当前原图和参数写入应用内的一个恢复槽；下次启动会恢复最后一次成功保存。未保存的修改在进程结束后不保证恢复。保存新工程会替换该恢复槽，重要作品请导出工程备份。
-- **导出工程**生成 `.nijiproj` 文件，包含原图及其原始元数据，可通过“打开工程”继续修改。即使原始外部照片被移走，工程仍能打开。卸载应用会删除内部恢复槽。
-- **导出照片**生成裁剪／旋转后完整尺寸的 sRGB JPEG，质量 95，不复制 GPS 等原图元数据。照片导出与工程保存分开；导出前也会保存内部恢复副本。
-- 当前裁剪只有居中方形开关；首版格式仍为实验版本。Android 与 Windows 的实际接力尚未验证。
+照片在本机处理，无账号、网络权限或模型下载。自动磨皮、局部修复／蒙版、液化、生成式处理、图层合成、批量和 RAW/HDR 工作流不在当前基础版中。
 
-## 构建与验证
+## 使用与数据保护
 
-需要 JDK 21、Android SDK（API 36、Build Tools 36.0.0）、NDK 28.2.13676358、CMake 3.22.1。设置 `ANDROID_HOME` 或未提交的 `local.properties`；无需任何仓库外脚本。
+1. 导入照片或打开工程，选择工具查看实时预览。点“应用调整”或切换工具会应用当前工具；“取消调整”还原本次工具中的修改。
+2. 已应用的修改自动保存；请留意“调整待应用”“自动保存中”“已保存”状态。未应用的工具预览不属于自动保存内容，进程结束后不保证恢复。重置全部调整可撤销；跨工程重开不保留完整撤销历史。
+3. 从“项目”回到主页管理多个作品。工程保存完整原图副本和参数，移动外部原图后仍可编辑。删除工程不删除外部原图；卸载应用会删除内部工程，请提前导出重要作品。
+4. “导出”可选择照片格式、质量、原尺寸或缩小长边；不会放大小图。导出照片不复制 GPS 等原图元数据。导出工程包含原图及其原始元数据，适合备份和继续编辑。
+
+当前输入范围为 sRGB JPEG 和 8 位不透明 PNG，上限 800 万像素、32 MiB。透明、宽色域、已识别的 HDR 增益图及其他不支持的输入会明确提示。此限制尚未经真机性能验证。工程格式仍为实验版本；可读取并迁移基础版 v1 工程，新保存使用 v2。
+
+## 构建与检查
+
+需要 JDK 21、Android SDK API 36、Build Tools 36.0.0、NDK 28.2.13676358、CMake 3.22.1。设置 `ANDROID_HOME` 或未提交的 `local.properties`；不依赖仓库外脚本。
 
 ```sh
 sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'ndk;28.2.13676358' 'cmake;3.22.1'
 ./gradlew :editor-core:test :app:assembleDebug :app:lintDebug
 ```
 
-APK：`app/build/outputs/apk/debug/app-debug.apk`。当前构建包含 `arm64-v8a`、`x86_64`，最低 API 26 是配置起点；实际验证环境见 [验证说明](docs/validation.md)。依赖和工具版本固定于仓库，版本选择不是“最新版本”承诺。
+APK：`app/build/outputs/apk/debug/app-debug.apk`，包含 arm64-v8a 和 x86_64。配置最低 API 26，实际验证范围单独记录，不以配置代替设备验证。
 
-启动一个 Android 模拟器或连接设备后：
+使用专用 API 29+ 测试模拟器运行包含真实系统选择器和触控流程的 Android 检查。运行器会重装／卸载测试应用，需要保留的工程请先导出：
 
 ```sh
 ./gradlew :app:connectedDebugAndroidTest
 ./gradlew :app:installDebug
 ```
 
-Linux 主机上验证独立像素核心：
+Linux 上检查独立 C++ 核心（启用 ASan/UBSan）：
 
 ```sh
 cmake -S image-core/src/main/cpp -B build/native -DCMAKE_BUILD_TYPE=Debug
@@ -39,14 +50,13 @@ cmake --build build/native
 ctest --test-dir build/native --output-on-failure
 ```
 
-GitHub Actions 配置执行 JVM 测试、APK 构建、Lint、native sanitizer 检查和 API 36 模拟器测试。配置落地不等于已在 GitHub 上运行；本地验证记录单独列出。
+[GitHub Actions](https://github.com/JasonHe17/NijiFrame/actions/workflows/android.yml) 执行构建、Lint、JVM/native 检查和 API 29／36 模拟器测试，保留报告与开发 APK。应查看具体提交的运行结果；历史失败不会被描述为通过。物理手机与 Windows 尚未验证。
 
-## 开发资料
+## 开发资料与许可
 
-- [架构与实施顺序](docs/architecture.md)
-- [工程格式 v1](docs/project-format.md)
-- [验证范围与手工步骤](docs/validation.md)
-- [贡献说明](CONTRIBUTING.md)
+- [基础版范围与验收清单](docs/basic-editor-plan.md)
+- [架构](docs/architecture.md)、[v2工程语义与v1迁移](docs/project-format.md)
+- [验证方法与覆盖范围](docs/validation.md)、[贡献说明](CONTRIBUTING.md)
 - [第三方来源与许可](THIRD_PARTY_NOTICES.md)
 
-项目自有代码采用 **GPL-3.0-only**，见 [LICENSE](LICENSE)。第三方代码、模型和素材须分别核查许可及必要声明；项目不授予无权许可的第三方专利权。多人、批量、复杂合成及自动人像效果属于后续范围。
+项目自有代码采用 **GPL-3.0-only**，见 [LICENSE](LICENSE)。第三方组件保留各自许可；引入算法、模型和素材时分别核查来源、许可及相关专利问题。项目不授予无权许可的第三方专利权。

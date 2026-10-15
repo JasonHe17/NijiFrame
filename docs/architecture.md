@@ -1,6 +1,6 @@
 # Initial architecture proposal
 
-Status: foundation implemented. Android app, plain JVM editor-core and Android/JNI image-core are separate Gradle modules. Optional analysis and desktop integration remain planned.
+Status: basic editor implemented; final delivery checks are tracked separately. Android app, plain JVM editor-core and Android/JNI image-core are separate Gradle modules. Optional analysis and desktop integration remain planned.
 
 ## Responsibilities
 
@@ -44,3 +44,12 @@ Accessibility starts with labeled actions, readable states, adequate touch targe
 6. Improve performance and visual quality with physical-device measurements and user feedback.
 
 Before packaging a release, review dependency and model notices, source distribution obligations, applicable patent questions and the behavior of unsupported project versions. These tasks do not turn exploratory results into release-quality guarantees.
+
+
+## Basic editor state and navigation
+
+The home screen lists independent UUID-backed projects. EditorViewModel owns the active project, parameter history, a transient tool draft and the current preview. Applying or switching tools commits a single parameter transaction; cancelling drops the draft. Configuration recreation retains that view model. Committed edits schedule an atomic save, and transitions/exports flush pending committed edits. Restoring a project reconstructs its parameters and original without restoring in-memory history.
+
+Rendering uses cancellable strips and a monotonically increasing generation; older jobs cannot publish a preview over a newer state. Source decode/render work and project saves use separate mutexes. The crop tool draws an overlay over the full transformed source; dragging the rectangle updates only that overlay, and applying it renders the crop. Width/height, aspect and corner/move constraints live in editor-core rather than Android gesture coordinates.
+
+The platform layer handles file pickers, project thumbnails, format/size choices and a non-exported FileProvider restricted to generated shared photos. Share grants read access only to the selected output. Neither the portable manifest nor the native processing boundary contains Android URIs. Windows UI and decoder integration remain separate future work.
