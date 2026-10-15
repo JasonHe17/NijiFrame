@@ -54,7 +54,7 @@ class ProjectRepository(private val context: Context,
     fun read(id: String): Pair<Project,Bitmap> = decode(library.read(id))
     fun restore(): Pair<Project,Bitmap> = read(requireNotNull(library.latest()) { "还没有保存的工程，请先导入照片" })
     private fun decode(project: Project): Pair<Project, Bitmap> {
-        val info = ImagePipeline.inspect(project.original)
+        val info = ImagePipeline.inspect(project.original,project.manifest.honorExifColorSpace)
         require(info.width == project.manifest.width && info.height == project.manifest.height) { "工程尺寸与原图不一致" }
         requireCodecMemory(info)
         val bitmap = ImagePipeline.decode(project.original, ImageSizing.previewSample(info.width, info.height), info)
@@ -85,7 +85,7 @@ class ProjectRepository(private val context: Context,
         val sample = ImageSizing.exportSample(m, settings)
         val reusable = source.width == m.width && source.height == m.height && sample == 1
         val required = ImageSizing.exportWorkingBytes(m, sample, reusable, settings.maxEdge != null) +
-            (if(reusable) 0 else ImagePipeline.inspect(project.original).codecHeadroom)
+            (if(reusable) 0 else ImagePipeline.inspect(project.original,project.manifest.honorExifColorSpace).codecHeadroom)
         if (required > availableMemory()) {
             // Previous projects/previews can be unreachable but not collected yet. Recheck once before refusal.
             // This runs on a worker, and never raises the budget or substitutes a lower resolution.
@@ -101,7 +101,7 @@ class ProjectRepository(private val context: Context,
         val context = currentCoroutineContext()
         context.ensureActive()
         val reusable = source.width == m.width && source.height == m.height && sample == 1
-        val input = if (reusable) source else ImagePipeline.decode(project.original, sample, check = { context.ensureActive() })
+        val input = if (reusable) source else ImagePipeline.decode(project.original, sample, info=ImagePipeline.inspect(project.original,m.honorExifColorSpace), check = { context.ensureActive() })
         try {
             val edit = ImagePipeline.scaledEdit(m.edit, m.width, m.height, input.width, input.height)
             var rendered = ImagePipeline.render(input, edit)

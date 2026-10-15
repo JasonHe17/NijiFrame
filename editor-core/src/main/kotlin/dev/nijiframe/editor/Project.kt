@@ -44,7 +44,8 @@ data class Manifest(
     val height: Int,
     val edit: Edit = Edit(),
     val name: String = "Untitled",
-    val localMask: MaskResource? = null
+    val localMask: MaskResource? = null,
+    val honorExifColorSpace: Boolean = false
 ) {
     fun validate() {
         require((version == 1 && pipeline == "srgb-tone-crop-turn-v1") ||
@@ -53,6 +54,7 @@ data class Manifest(
             (version == 4 && pipeline == "srgb-soften-v4") ||
             (version == 5 && pipeline == "srgb-region-v5") ||
             (version == 6 && pipeline == "srgb-import-v6")) { "Unsupported project version or operation" }
+        if(version < 6) require(!honorExifColorSpace) { "Legacy project cannot change EXIF color interpretation" }
         if(version < 5) require(edit.local.region.base == null) { "Legacy project cannot contain base coverage" }
         if(version < 4) require(edit.local.soften == 0f && edit.local.detailProtection == .75f) { "Legacy project cannot contain softening" }
         if(version < 3) require(edit.local == LocalAdjustment() && localMask == null) { "Legacy project cannot contain local adjustments" }

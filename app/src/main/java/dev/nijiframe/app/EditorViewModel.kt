@@ -120,7 +120,7 @@ class EditorViewModel @JvmOverloads constructor(application: Application,
         interactiveSource?.recycle()
         source=bitmap
         interactiveSource=withContext(Dispatchers.Default) {ImagePipeline.interactiveSource(bitmap)}
-        val inputInfo=withContext(Dispatchers.Default) {ImagePipeline.inspect(project.original)}
+        val inputInfo=withContext(Dispatchers.Default) {ImagePipeline.inspect(project.original,project.manifest.honorExifColorSpace)}
         history=History(project.manifest.edit);savedManifest=project.manifest
         mutable.value=mutable.value.copy(project=project,projectId=id,home=false,sourceNotice=inputInfo.notice,preview=null,regionOverlay=null,approximatePreview=false,dirty=false,
             canUndo=false,canRedo=false,tool=null,draft=null,cropAspect=null,comparing=false,status="所有修改已保存")
@@ -394,7 +394,7 @@ class EditorViewModel @JvmOverloads constructor(application: Application,
             var overlay: Bitmap?=null
             try {
                 withContext(Dispatchers.Default) { pixelWork.withLock {
-                    val required=project.original.size.toLong()+64L*1024*1024+ImagePipeline.inspect(project.original).codecHeadroom
+                    val required=project.original.size.toLong()+64L*1024*1024+ImagePipeline.inspect(project.original,project.manifest.honorExifColorSpace).codecHeadroom
                     if(required>ImageMemory.available(getApplication())) System.gc()
                     require(required<=ImageMemory.available(getApplication())) {"当前内存不足以查看细节，请稍后重试；工程仍保留"}
                     pending=DetailRenderer.render(project,edit,d.center,width,height)

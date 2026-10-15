@@ -64,7 +64,7 @@ internal object DetailRenderer {
             Rect(floor(box.left).toInt()-2,floor(box.top).toInt()-2,ceil(box.right).toInt()+2,ceil(box.bottom).toInt()+2)
         }
         val radius=if(edit.local.soften>0f) (min(m.width,m.height)/600f).roundToInt().coerceIn(1,6) else 0
-        val info=ImagePipeline.inspect(project.original)
+        val info=ImagePipeline.inspect(project.original,project.manifest.honorExifColorSpace)
         require(info.width==m.width && info.height==m.height) {"工程尺寸与原图不一致"}
         // JPEG chroma interpolation also needs neighbors beyond the requested region, even with neutral effects.
         val sourceRect=expand(sourceBounds,radius+if(info.mime=="image/jpeg") 16 else 0,m.width,m.height)

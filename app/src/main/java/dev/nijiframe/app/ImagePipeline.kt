@@ -29,7 +29,7 @@ object ImagePipeline {
         val codecHeadroom get() = if(mime in setOf("image/avif","image/heif","image/heic")) width.toLong()*height*8 else 0L
     }
 
-    fun inspect(bytes: ByteArray): ImageInfo = PhotoInput.inspect(bytes)
+    fun inspect(bytes: ByteArray,honorExifColorSpace: Boolean=true): ImageInfo = PhotoInput.inspect(bytes,honorExifColorSpace)
 
     fun decode(bytes: ByteArray, sample: Int = 1, info: ImageInfo = inspect(bytes), check: () -> Unit = {}): Bitmap {
         require(sample > 0 && sample and (sample - 1) == 0)

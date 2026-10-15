@@ -12,7 +12,7 @@ class BaseCoverageTest {
     @Test fun v5MigratesInputPolicyWithoutChangingSourceOrEdits() {
         val edit=Edit(turns=1,local=LocalAdjustment(.5f,Region(base=base),.3f))
         val current=ProjectIO.create(byteArrayOf(1,2,3),100,80).withEdit(edit)
-        val legacy=current.copy(manifest=current.manifest.copy(version=5,pipeline="srgb-region-v5"))
+        val legacy=current.copy(manifest=current.manifest.copy(version=5,honorExifColorSpace=false,pipeline="srgb-region-v5"))
         val encoded=ByteArrayOutputStream().also {ProjectIO.write(legacy,it)}.toByteArray()
         val loaded=ProjectIO.read(encoded.inputStream())
         assertEquals(6,loaded.manifest.version);assertEquals("srgb-import-v6",loaded.manifest.pipeline)
@@ -62,6 +62,6 @@ class BaseCoverageTest {
             }
         }}.toByteArray()
         val migrated=ProjectIO.read(bytes.inputStream())
-        assertEquals(p.manifest,migrated.manifest);assertArrayEquals(p.original,migrated.original)
+        assertEquals(p.manifest.copy(honorExifColorSpace=false),migrated.manifest);assertArrayEquals(p.original,migrated.original)
     }
 }

@@ -15,7 +15,7 @@ internal object PhotoInput {
     fun options(sample: Int=1)=BitmapFactory.Options().apply {
         inSampleSize=sample;inPreferredConfig=Bitmap.Config.ARGB_8888;inPreferredColorSpace=srgb
     }
-    fun inspect(bytes: ByteArray): ImagePipeline.ImageInfo {
+    fun inspect(bytes: ByteArray,honorExifColorSpace: Boolean): ImagePipeline.ImageInfo {
         val bounds=BitmapFactory.Options().apply {inJustDecodeBounds=true}
         BitmapFactory.decodeByteArray(bytes,0,bytes.size,bounds)
         val brand=String(bytes,0,minOf(64,bytes.size),Charsets.ISO_8859_1)
@@ -39,7 +39,7 @@ internal object PhotoInput {
             "这张照片是 HLG/PQ HDR 编码，尚不能可靠转换；请先由相册导出 SDR JPEG，普通广色域和 Ultra HDR JPEG 可直接导入"
         }
         val exif=ExifInterface(bytes.inputStream())
-        val adobe=mime=="image/jpeg" && !hasJpegIcc(bytes) && (color==null || color==srgb) &&
+        val adobe=honorExifColorSpace && mime=="image/jpeg" && !hasJpegIcc(bytes) && (color==null || color==srgb) &&
             (exif.getAttributeInt(ExifInterface.TAG_COLOR_SPACE,-1)==2 || exif.getAttribute(ExifInterface.TAG_INTEROPERABILITY_INDEX)=="R03")
         val xmp=exif.getAttribute(ExifInterface.TAG_XMP).orEmpty()
         val gainmap=xmp.contains("hdrgm",true) || xmp.contains("hdrgainmap",true) || xmp.contains("hdr-gain-map",true)

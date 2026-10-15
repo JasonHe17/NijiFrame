@@ -33,7 +33,7 @@ class PhotoFormatTest {
         val (project,decoded)=repository.importPhoto(Uri.fromFile(input))
         try {
             assertEquals(expectedWidth,project.manifest.width);assertEquals(expectedHeight,project.manifest.height)
-            assertEquals(6,project.manifest.version);assertArrayEquals(bytes,project.original)
+            assertEquals(6,project.manifest.version);assertTrue(project.manifest.honorExifColorSpace);assertArrayEquals(bytes,project.original)
             assertEquals(ColorSpace.get(ColorSpace.Named.SRGB),decoded.colorSpace)
             assertEquals(Bitmap.Config.ARGB_8888,decoded.config)
             if(Build.VERSION.SDK_INT>=34) assertFalse(decoded.hasGainmap())
@@ -104,6 +104,20 @@ class PhotoFormatTest {
             val expected=Color.rgb((rgb[0]*255+.5f).toInt(),(rgb[1]*255+.5f).toInt(),(rgb[2]*255+.5f).toInt())
             val decoded=roundTrip(bytes,192,128)
             try {closeColor(expected,decoded.getPixel(40,40))} finally {decoded.recycle()}
+            // The old decoder ignored this EXIF hint. Migration must retain those saved colors.
+            val legacyRoot=File(context.cacheDir,"legacy-exif-${System.nanoTime()}").apply {mkdirs()}
+            try {
+                val repo=ProjectRepository(context,File(legacyRoot,"library"))
+                val current=ProjectIO.create(bytes,192,128)
+                val old=current.copy(manifest=current.manifest.copy(version=5,pipeline="srgb-region-v5",honorExifColorSpace=false))
+                val archive=File(legacyRoot,"old.nijiproj");repo.exportProject(old,Uri.fromFile(archive))
+                val (loaded,legacyPixels)=repo.open(Uri.fromFile(archive))
+                try {
+                    assertFalse(loaded.manifest.honorExifColorSpace)
+                    closeColor(pixel,legacyPixels.getPixel(40,40),0)
+                    assertFalse(loaded.withEdit(Edit(exposureEv=.2f)).manifest.honorExifColorSpace)
+                } finally {legacyPixels.recycle()}
+            } finally {legacyRoot.deleteRecursively()}
             val high=roundTrip(png16(),192,128)
             try {closeColor(Color.rgb(128,64,32),high.getPixel(40,40))} finally {high.recycle()}
         } finally {raw.recycle();file.delete()}
