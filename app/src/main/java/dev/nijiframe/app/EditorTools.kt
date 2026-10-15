@@ -44,11 +44,12 @@ internal fun ToolPanel(ui: EditorUi, editor: EditorViewModel, modifier: Modifier
             }
             val tool=ui.tool;val draft=ui.draft
             if(tool==null || draft==null) {
-                Text("选择工具开始调整",style=MaterialTheme.typography.bodyMedium,modifier=Modifier.padding(12.dp))
-                Text("双指缩放，拖动画布；双击切换缩放。已应用的调整会自动保存。",style=MaterialTheme.typography.bodySmall,
-                    modifier=Modifier.padding(horizontal=12.dp,vertical=4.dp))
+                Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
+                    Text("选择工具开始调整",style=MaterialTheme.typography.bodySmall,modifier=Modifier.weight(1f).padding(start=8.dp))
+                    TextButton(onClick={editor.beginTool(EditorTool.LOCAL)}) {Text("人像修图")}
+                }
             } else {
-                Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+                Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).semantics {contentDescription="工具设置"}) {
                 when(tool) {
                     EditorTool.LOCAL -> LocalPanel(ui,editor,draft)
                     EditorTool.LIGHT -> AdjustmentPanel(draft,editor,listOf(Adjustment.EXPOSURE,Adjustment.CONTRAST,
@@ -118,19 +119,34 @@ private fun AdjustmentPanel(edit: Edit, editor: EditorViewModel, choices: List<A
 
 @Composable
 private fun LocalPanel(ui: EditorUi, editor: EditorViewModel, draft: Edit) {
+    var effects by rememberSaveable {mutableStateOf(false)}
+    var drawingMode by rememberSaveable {mutableStateOf(RegionMode.ADD)}
     var setting by rememberSaveable {mutableStateOf("局部曝光")}
-    Row(Modifier.horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(6.dp)) {
-        RegionMode.entries.forEach { mode -> FilterChip(selected=ui.regionMode==mode,
-            onClick={editor.regionMode(mode)},label={Text(mode.label)}) }
+    LaunchedEffect(ui.regionMode) {if(effects && ui.regionMode!=RegionMode.MOVE) effects=false}
+    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(6.dp)) {
+        FilterChip(selected=!effects,onClick={
+            effects=false;editor.showRegion(true);editor.regionMode(drawingMode)
+        },label={Text("选区与修正")})
+        FilterChip(selected=effects,onClick={
+            if(!effects) drawingMode=ui.regionMode
+            effects=true;editor.showRegion(false);editor.regionMode(RegionMode.MOVE)
+        },label={Text("调整效果")})
     }
-    TextButton(onClick=editor::suggestRegion,enabled=!ui.busy && !ui.rendering) {Text("建议人像区域（实验）")}
-    Row(verticalAlignment=Alignment.CenterVertically) {
-        Checkbox(checked=ui.showRegion,onCheckedChange=editor::showRegion,modifier=Modifier.semantics {contentDescription="显示区域"})
-        Text("显示区域 · ${draft.local.region.strokes.size} 笔" + if(draft.local.region.base!=null) " · 含建议" else "",style=MaterialTheme.typography.bodySmall)
-        TextButton(onClick=editor::clearRegion,enabled=!draft.local.region.isEmpty) {Text("清空区域")}
+    if(!effects) {
+        TextButton(onClick=editor::suggestRegion,enabled=!ui.busy && !ui.rendering) {Text("建议人像区域（实验）")}
+        RegionModes(ui,editor,enabled=!ui.comparing)
+        RegionVisibility(ui,editor,enabled=!ui.comparing)
+        BrushSettings(ui,editor,enabled=!ui.comparing && ui.regionMode!=RegionMode.MOVE)
+        Text("可直接手工涂选；采用建议后先检查眼睛、头发和遮挡，再切换调整效果。",
+            style=MaterialTheme.typography.bodySmall)
+        return
     }
+    Text(if(draft.local.region.isEmpty) "尚未选择区域 · 请先返回选区与修正"
+        else if(ui.showRegion) "覆盖已显示 · 隐藏后检查效果" else "覆盖已隐藏 · 调整后用查看细节检查纹理",
+        style=MaterialTheme.typography.bodySmall)
+    if(ui.showRegion) TextButton(onClick={editor.showRegion(false)}) {Text("隐藏覆盖")}
     Row(Modifier.horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(6.dp)) {
-        listOf("局部曝光","柔肤（实验）","细节保护","笔刷大小","边缘硬度").forEach { item ->
+        listOf("局部曝光","柔肤（实验）","细节保护").forEach { item ->
             FilterChip(selected=setting==item,onClick={setting=item},label={Text(item)})
         }
     }
@@ -148,16 +164,6 @@ private fun LocalPanel(ui: EditorUi, editor: EditorViewModel, draft: Edit) {
             Slider(value=draft.local.detailProtection,onValueChange={editor.updateDraft(draft.copy(local=draft.local.copy(detailProtection=it)))},
                 onValueChangeFinished=editor::localCheckpoint,valueRange=0f..1f,
                 modifier=Modifier.systemGestureExclusion().semantics {contentDescription="柔肤细节保护"})
-        }
-        "笔刷大小" -> {
-            Text("直径 ${String.format(Locale.ROOT,"%.1f%%",ui.brushRadius*200)} · 相对原图短边",style=MaterialTheme.typography.labelMedium)
-            Slider(value=ui.brushRadius,onValueChange=editor::brushRadius,valueRange=.005f.. .25f,
-                modifier=Modifier.systemGestureExclusion().semantics {contentDescription="区域笔刷大小"})
-        }
-        "边缘硬度" -> {
-            Text(String.format(Locale.ROOT,"%.0f%%",ui.brushHardness*100),style=MaterialTheme.typography.labelMedium)
-            Slider(value=ui.brushHardness,onValueChange=editor::brushHardness,valueRange=0f..1f,
-                modifier=Modifier.systemGestureExclusion().semantics {contentDescription="区域边缘硬度"})
         }
         else -> {
             Text(String.format(Locale.ROOT,"%.2f EV · 仅影响涂选区域",draft.local.exposureEv),style=MaterialTheme.typography.labelMedium)

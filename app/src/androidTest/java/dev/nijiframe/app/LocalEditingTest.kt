@@ -121,6 +121,7 @@ class LocalEditingTest {
             tap("撤销")
             await {find("显示区域 · 0 笔").exists()}
             tap("重做")
+            tap("调整效果")
             scrollTo("局部曝光调整")
             val slider=desc("局部曝光调整").visibleBounds
             device.swipe(slider.centerX(),slider.centerY(),slider.left+slider.width()*3/4,slider.centerY(),15)

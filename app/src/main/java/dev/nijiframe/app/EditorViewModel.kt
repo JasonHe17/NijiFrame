@@ -28,7 +28,7 @@ data class EditorUi(
     val project: Project? = null, val projectId: String? = null,
     val projects: List<ProjectLibrary.Entry> = emptyList(), val home: Boolean = true,
     val suggestion: Region? = null, val suggestionOverlay: Bitmap? = null,
-    val sourceNotice: String? = null, val detail: DetailUi? = null, val preview: Bitmap? = null, val regionOverlay: Bitmap? = null, val approximatePreview: Boolean = false,
+    val sourceNotice: String? = null, val sourceWarning: String? = null, val detail: DetailUi? = null, val preview: Bitmap? = null, val regionOverlay: Bitmap? = null, val approximatePreview: Boolean = false,
     val regionMode: RegionMode = RegionMode.ADD, val showRegion: Boolean = true,
     val brushRadius: Float = .06f, val brushHardness: Float = .5f,
     val localCanUndo: Boolean = false, val localCanRedo: Boolean = false, val busy: Boolean = false, val saving: Boolean = false,
@@ -122,7 +122,7 @@ class EditorViewModel @JvmOverloads constructor(application: Application,
         interactiveSource=withContext(Dispatchers.Default) {ImagePipeline.interactiveSource(bitmap)}
         val inputInfo=withContext(Dispatchers.Default) {ImagePipeline.inspect(project.original,project.manifest.honorExifColorSpace)}
         history=History(project.manifest.edit);savedManifest=project.manifest
-        mutable.value=mutable.value.copy(project=project,projectId=id,home=false,sourceNotice=inputInfo.notice,preview=null,regionOverlay=null,approximatePreview=false,dirty=false,
+        mutable.value=mutable.value.copy(project=project,projectId=id,home=false,sourceNotice=inputInfo.notice,sourceWarning=inputInfo.warning,preview=null,regionOverlay=null,approximatePreview=false,dirty=false,
             canUndo=false,canRedo=false,tool=null,draft=null,cropAspect=null,comparing=false,status="所有修改已保存")
         render()
     }
