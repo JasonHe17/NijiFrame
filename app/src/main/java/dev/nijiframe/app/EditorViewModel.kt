@@ -19,7 +19,8 @@ enum class EditorTool(val label: String) {
 enum class RegionMode(val label: String) { ADD("添加区域"), ERASE("擦除区域"), MOVE("移动画布") }
 data class DetailUi(val center: MaskPoint=MaskPoint(.5f,.5f), val comparing: Boolean=false,
     val loading: Boolean=false, val bitmap: Bitmap?=null, val bounds: android.graphics.Rect?=null,
-    val outputWidth: Int, val outputHeight: Int, val error: String?=null)
+    val outputWidth: Int, val outputHeight: Int, val error: String?=null,
+    val regionOverlay: Bitmap?=null, val revision: Long=0)
 
 enum class ExportDestination { PHOTO, PROJECT }
 data class SharedPhoto(val uri: Uri, val mime: String)
@@ -201,6 +202,13 @@ class EditorViewModel @JvmOverloads constructor(application: Application,
         }
         updateDraft(edit.copy(local=edit.local.copy(region=region)));localCheckpoint()
     }
+    fun addDetailStroke(points: List<MaskPoint>, frame: DetailUi) {
+        val current=mutable.value.detail ?: return
+        // A gesture belongs to the displayed frame, never to a new location or comparison.
+        if(current!==frame || current.loading || current.comparing || current.bitmap==null ||
+            mutable.value.regionMode==RegionMode.MOVE) return
+        addStroke(points)
+    }
     fun clearRegion() {
         val edit=mutable.value.draft ?: return
         updateDraft(edit.copy(local=edit.local.copy(region=Region())));localCheckpoint()
@@ -262,9 +270,16 @@ class EditorViewModel @JvmOverloads constructor(application: Application,
         edit.validate(project.manifest.width,project.manifest.height)
         val previous=mutable.value
         mutable.value=previous.copy(draft=edit,comparing=false)
+        val keepDetail=previous.detail!=null && previous.tool==EditorTool.LOCAL &&
+            previous.draft?.copy(local=edit.local)==edit
+        if(keepDetail) {
+            detailJob?.cancel();detailGeneration++;detailEdit=edit
+            mutable.value=mutable.value.copy(detail=previous.detail!!.copy(bitmap=null,regionOverlay=null,
+                loading=true,error=null,revision=previous.detail.revision+1))
+        }
         // Crop handles change the overlay only; the full transformed photo underneath is unchanged.
         if (previous.tool!=EditorTool.CROP || previous.comparing ||
-            previous.draft?.copy(crop=null)!=edit.copy(crop=null)) render(debounce=true)
+            previous.draft?.copy(crop=null)!=edit.copy(crop=null)) render(debounce=true,keepDetail=keepDetail)
     }
     fun applyTool() {
         val draft=mutable.value.draft ?: return
@@ -290,8 +305,8 @@ class EditorViewModel @JvmOverloads constructor(application: Application,
     // Kept as a direct preview boundary for sliders outside a tool transaction.
     fun previewEdit(edit: Edit) { if (!mutable.value.busy) render(edit,true) }
     fun compare() { mutable.value=mutable.value.copy(comparing=!mutable.value.comparing);render() }
-    private fun render(temporary: Edit?=null, debounce: Boolean=false) {
-        closeDetail()
+    private fun render(temporary: Edit?=null, debounce: Boolean=false, keepDetail: Boolean=false) {
+        if(!keepDetail) closeDetail()
         renderJob?.cancel()
         val state=mutable.value
         val project=state.project ?: return
@@ -357,41 +372,45 @@ class EditorViewModel @JvmOverloads constructor(application: Application,
         if(bounded==d.center) return
         detailJob?.cancel();detailGeneration++
         mutable.value=mutable.value.copy(detail=d.copy(center=bounded,
-            bitmap=null,bounds=null,error=null,loading=true))
+            bitmap=null,regionOverlay=null,bounds=null,error=null,loading=true))
     }
     fun detailCompare() {
         val d=mutable.value.detail ?: return
         detailJob?.cancel();detailGeneration++
-        mutable.value=mutable.value.copy(detail=d.copy(comparing=!d.comparing,bitmap=null,error=null,loading=true))
+        mutable.value=mutable.value.copy(detail=d.copy(comparing=!d.comparing,bitmap=null,regionOverlay=null,error=null,loading=true))
     }
     fun loadDetail(width: Int, height: Int) {
         val d=mutable.value.detail ?: return
         val project=mutable.value.project ?: return
         var edit=detailEdit ?: return
+        val local=mutable.value.tool==EditorTool.LOCAL && !d.comparing
         if(d.comparing) edit=Look.NEUTRAL.apply(edit).copy(local=LocalAdjustment())
         detailJob?.cancel()
         val ticket=++detailGeneration
-        mutable.value=mutable.value.copy(detail=d.copy(loading=true,bitmap=null,error=null))
+        mutable.value=mutable.value.copy(detail=d.copy(loading=true,bitmap=null,regionOverlay=null,error=null))
         detailJob=viewModelScope.launch {
             var pending: DetailRenderer.Frame?=null
+            var overlay: Bitmap?=null
             try {
                 withContext(Dispatchers.Default) { pixelWork.withLock {
                     val required=project.original.size.toLong()+64L*1024*1024
                     if(required>ImageMemory.available(getApplication())) System.gc()
                     require(required<=ImageMemory.available(getApplication())) {"当前内存不足以查看细节，请稍后重试；工程仍保留"}
                     pending=DetailRenderer.render(project,edit,d.center,width,height)
+                    if(local) overlay=DetailRenderer.regionOverlay(project.manifest.width,project.manifest.height,edit,pending!!.bounds)
                 }}
                 val frame=requireNotNull(pending)
                 if(ticket==detailGeneration && mutable.value.detail!=null) mutable.value=mutable.value.copy(
-                    detail=mutable.value.detail!!.copy(loading=false,bitmap=frame.bitmap,bounds=frame.bounds))
-                else frame.bitmap.recycle()
+                    detail=mutable.value.detail!!.copy(loading=false,bitmap=frame.bitmap,bounds=frame.bounds,regionOverlay=overlay))
+                else {frame.bitmap.recycle();overlay?.recycle()}
+                overlay=null
                 pending=null
             } catch(cancelled: CancellationException) {throw cancelled}
             catch(error: Exception) {if(ticket==detailGeneration) mutable.value=mutable.value.copy(
                 detail=mutable.value.detail?.copy(loading=false,error=message(error)))}
             catch(_: OutOfMemoryError) {if(ticket==detailGeneration) mutable.value=mutable.value.copy(
                 detail=mutable.value.detail?.copy(loading=false,error="查看细节时内存不足；请关闭细节视图，工程仍保留"))}
-            finally {pending?.bitmap?.recycle()}
+            finally {pending?.bitmap?.recycle();overlay?.recycle()}
         }
     }
 

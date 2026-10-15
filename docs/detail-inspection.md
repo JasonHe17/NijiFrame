@@ -2,7 +2,15 @@
 
 0.6.0-dev adds **查看细节** on the canvas and **原尺寸细节** in the editor menu. The main large-image preview remains reduced; this separate view reads an original-resolution region so skin texture, softening and sharpening can be inspected without exporting the full image.
 
-Tap the overview to choose a position. A white rectangle marks the window. The lower image uses one image pixel per screen pixel, up to 768 × 768 pixels; smaller images are not enlarged to fill the window. **查看原图／查看调整** compares effects while retaining the current geometry. Close or press Back to return. Inspection is read-only, including when a tool draft is pending: it does not apply, cancel, save or add an undo step. While editing a crop, the overview follows the uncropped canvas; apply the crop to inspect the cropped result.
+Tap the overview to choose a position. A white rectangle marks the window. The lower image uses one image pixel per screen pixel, up to 768 × 768 pixels; smaller images are not enlarged to fill the window. **查看原图／查看调整** compares effects while retaining the current geometry. Close or press Back to return. Opening, comparing and closing the inspector do not apply or save a tool draft. Outside the Local tool, inspection is read-only. While editing a crop, the overview follows the uncropped canvas; apply the crop to inspect the cropped result.
+
+## Correcting the local region
+
+With **局部** active, the detail window offers **细节添加／细节擦除**, overlay visibility, brush radius and local undo/redo. Taps and strokes modify the same draft as the main canvas, including corrections over an accepted portrait suggestion. Close the window and use **应用调整** to commit, or **取消调整** to discard the entire tool draft. Hardness is inherited from the Local tool. Original comparison disables painting. Blank space around a small image ignores touches; moving outside the visible native frame or adding a second finger cancels the pending stroke.
+
+Touch positions are relative to the centered native frame, offset into cropped output pixels, and mapped back through `SourceGeometry` to normalized original coordinates. A frame change invalidates in-progress gestures. Stroke completion and undo/redo invalidate the detail render; generation checks reject obsolete results. The overview and the selected ROI are recomputed through the shared pixel mutex. The window retains its position.
+
+The original remains unchanged and project format stays v5. The existing coverage grid (long edge at most 1024), suggestion base (at most 256 per edge), brush radius bounds, and stroke/work limits still apply. Original-resolution display does not provide a full-resolution segmentation mask. The radius label uses original image pixels; straightening can enlarge its displayed footprint. New edits are not durable until the tool is applied.
 
 ## Rendering boundary
 
@@ -14,6 +22,8 @@ Without straightening, regression fixtures require region pixels to equal the co
 
 ## Evidence and sources
 
-`DetailRendererTest` compares color, masks, geometry and image boundaries against full renders and reads original texture from a generated 100 MP PNG without a full bitmap. `DetailInspectorTest` checks actual screen pixels at 1:1, position changes, comparison, recreation, Back and preservation of pending drafts and saved originals. Native tests compare a vignette window against a whole image and reject out-of-bounds windows.
+`DetailRendererTest` compares color, masks, geometry and image boundaries against full renders and reads original texture from a generated 100 MP PNG without a full bitmap. `DetailInspectorTest` checks actual screen pixels at 1:1, position changes, comparison, recreation, Back and preservation of pending drafts and saved originals. `DetailRegionTest` additionally exercises native-coordinate overlays through geometry, real touch correction over a base mask, padding/out-of-frame rejection, comparison, undo/redo, cancel, recreation, portable reopen/PNG output, and stale gesture rejection. Native tests compare a vignette window against a whole image and reject out-of-bounds windows.
 
 Platform behavior is documented in [BitmapRegionDecoder](https://developer.android.com/reference/android/graphics/BitmapRegionDecoder) and [Compose image scaling](https://developer.android.com/develop/ui/compose/graphics/images/customize). No runtime dependency, model or external image asset is added. Region decoding, display behavior and patent applicability require separate assessments; these references do not establish patent clearance.
+
+For this interaction, the relevant existing patent comparisons include [US8692847B2](https://patents.google.com/patent/US8692847B2/en) claims 1/6/13 and [US8885208B2](https://patents.google.com/patent/US8885208B2/en) claims 1/6. The implementation has one region with separate effect parameters, centerline feedback rather than an inner/outer effect cursor, no content-edge snapping, and serialized independent preview/ROI renders without incremental tile compositing from previous high-resolution edits. These are recorded technical differences, not a freedom-to-operate or legal-status conclusion.
