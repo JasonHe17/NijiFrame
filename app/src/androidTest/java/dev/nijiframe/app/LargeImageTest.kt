@@ -235,7 +235,17 @@ class LargeImageTest {
         try {
             assertTrue(file.length()>32L*1024*1024)
             val repo=ProjectRepository(context,File(root,"library"))
-            val (project,proxy)=repo.importPhoto(Uri.fromFile(file))
+            // The previous triple-array allowance rejected this file under the same budget.
+            val importer=ProjectRepository(context,File(root,"library")) {80L*1024*1024}
+            val (project,proxy)=importer.importPhoto(Uri.fromFile(file))
+            val cache=File(context.cacheDir,"photo-imports")
+            assertTrue(cache.listFiles().orEmpty().isEmpty())
+            val before=repo.library.entries()
+            val refused=ProjectRepository(context,File(root,"library")) {48L*1024*1024}
+            val error=assertThrows(IllegalArgumentException::class.java) {refused.importPhoto(Uri.fromFile(file))}
+            assertTrue(error.message!!.contains("内存"))
+            assertEquals(before,repo.library.entries())
+            assertTrue(cache.listFiles().orEmpty().isEmpty())
             try {
                 assertEquals(file.length(),project.original.size.toLong())
                 val edit=Edit(exposureEv=1f,turns=1,crop=Crop(100,200,2500,3500))

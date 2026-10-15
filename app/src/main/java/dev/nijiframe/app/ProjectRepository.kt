@@ -20,36 +20,34 @@ class ProjectRepository(private val context: Context,
     private val resolver = context.contentResolver
     val library = ProjectLibrary(directory, ::requireProjectMemory)
     private val importCache = File(context.cacheDir, "project-imports")
+    private val photoCache = File(context.cacheDir, "photo-imports")
     fun prepare() {
         // A killed process can leave a staged import. Do not touch recent files or saved projects.
-        importCache.listFiles()?.filter { it.name.startsWith("project-import-") && it.extension == "tmp" &&
-            System.currentTimeMillis() - it.lastModified() > 86_400_000 }?.forEach { it.delete() }
+        for (cache in listOf(importCache, photoCache)) {
+            cache.listFiles()?.filter { it.name.startsWith("project-import-") && it.extension == "tmp" &&
+                System.currentTimeMillis() - it.lastModified() > 86_400_000 }?.forEach { it.delete() }
+        }
         if (directory == File(context.filesDir,"library"))
             library.migrateLegacy(File(context.filesDir,"projects/current.nijiproj"))
     }
     fun importPhoto(uri: Uri): Pair<Project, Bitmap> {
-        fun budget() = minOf(ProjectIO.MAX_SOURCE_BYTES.toLong(), ((availableMemory() - 32L*1024*1024)/3).coerceAtLeast(0)).toInt()
-        fun read(limit: Int) = requireNotNull(resolver.openInputStream(uri)) { "无法读取图片" }.use {
-            ProjectIO.readBounded(it, limit)
-        }
-        var limit = budget()
-        val bytes = try { read(limit) } catch (first: IllegalArgumentException) {
-            // A previous project's byte arrays can await collection. Retry the read once with a fresh budget.
-            if (limit == ProjectIO.MAX_SOURCE_BYTES) throw IllegalArgumentException("照片文件超过 64 MiB 限制", first)
-            System.gc(); limit = budget()
-            try { read(limit) } catch (error: IllegalArgumentException) {
-                throw IllegalArgumentException(if (limit == ProjectIO.MAX_SOURCE_BYTES) "照片文件超过 64 MiB 限制"
-                    else "当前内存不足以读取这张照片，请关闭其他应用或使用较小文件", error)
+        var inspected: ImagePipeline.ImageInfo? = null
+        val project = try {
+            requireNotNull(resolver.openInputStream(uri)) { "无法读取图片" }.use { input ->
+                ProjectIO.create(input, photoCache, ::requirePhotoMemory) { bytes ->
+                    ImagePipeline.inspect(bytes).also { inspected = it }.let { it.width to it.height }
+                }
             }
+        } catch (error: ProjectIO.ResourceTooLargeException) {
+            throw IllegalArgumentException("照片文件超过 64 MiB 限制", error)
         }
-        val info = ImagePipeline.inspect(bytes)
+        val info = requireNotNull(inspected)
         requireCodecMemory(info)
-        val bitmap = ImagePipeline.decode(bytes, ImageSizing.previewSample(info.width, info.height), info)
+        val bitmap = ImagePipeline.decode(project.original, ImageSizing.previewSample(info.width, info.height), info)
         val name = runCatching { resolver.query(uri,arrayOf(OpenableColumns.DISPLAY_NAME),null,null,null)?.use {
             if (it.moveToFirst()) it.getString(0) else null
         }}.getOrNull()?.substringBeforeLast('.')?.filterNot { it.isISOControl() }?.take(80)?.trim().orEmpty()
         try {
-            val project = ProjectIO.create(bytes, info.width, info.height)
             return project.copy(manifest=project.manifest.copy(name=name.ifBlank { "新照片" })) to bitmap
         } catch (error: Throwable) { bitmap.recycle(); throw error }
     }
@@ -65,6 +63,11 @@ class ProjectRepository(private val context: Context,
         requireCodecMemory(info)
         val bitmap = ImagePipeline.decode(project.original, ImageSizing.previewSample(info.width, info.height), info)
         return project to bitmap
+    }
+    private fun requirePhotoMemory(sourceBytes: Int) {
+        val required = sourceBytes.toLong() + 32L * 1024 * 1024
+        if (required > availableMemory()) System.gc()
+        require(required <= availableMemory()) { "当前内存不足以读取这张照片，请关闭其他应用或使用较小文件" }
     }
     private fun requireProjectMemory(sourceBytes: Int) {
         val required = sourceBytes.toLong() + 32L * 1024 * 1024

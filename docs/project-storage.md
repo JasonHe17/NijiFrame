@@ -10,9 +10,9 @@ Validation still checks both directory and local entries, exact resource lengths
 
 ## Boundaries and checks
 
-- A separate JVM test with a 96 MiB heap opens a generated archive containing a 64 MiB incompressible original through both library and staged-provider paths. This tests storage, not image decoding or phone performance.
-- Android regression uses a generated >32 MiB PNG through edit, save, local reopen, portable export/import and reduced photo export. Injected memory refusal preserves the old library contents and clears import staging.
+- A separate JVM test with a 96 MiB heap imports a 64 MiB original and opens a generated archive containing a 64 MiB incompressible original through both library and staged-provider paths. This tests storage, not image decoding or phone performance.
+- Android regression uses a generated >32 MiB PNG through edit, save, local reopen, portable export/import and reduced photo export. An injected 80 MiB available budget admits the >32 MiB photo that the earlier triple-array budget rejected; 48 MiB refuses before source allocation. Injected memory refusal preserves the old library contents and clears import staging.
 - File tests retain v1–v6 parameters, regions and originals and reject malformed paths, central sizes/CRCs, payload corruption, truncated or oversized containers. Failed provider reads and admission clean up staging.
-- Original bytes still reside in a `ByteArray` throughout editing. Initial photo import still has temporary byte-array copies. Source-file streaming, >64 MiB inputs, and tiled full-resolution photo export remain future work.
+- Original bytes still reside in a `ByteArray` throughout editing. Initial photo import also stages its provider stream with a 64 KiB buffer and reads one final original array into the project. It requires temporary private disk space up to the 64 MiB source limit. The in-memory `create(ByteArray, ...)` convenience factory still copies caller-owned bytes; Android uses the staged stream factory. Source-file streaming, >64 MiB inputs, and tiled full-resolution photo export remain future work.
 
 The implementation uses standard [RandomAccessFile](https://developer.android.com/reference/java/io/RandomAccessFile) and [ZipInputStream](https://developer.android.com/reference/java/util/zip/ZipInputStream) APIs and introduces no dependency, codec, model or new processing algorithm. This is an I/O change to the existing self-contained project contract. It does not add network-address effect delivery or change the existing patent-review boundaries.
