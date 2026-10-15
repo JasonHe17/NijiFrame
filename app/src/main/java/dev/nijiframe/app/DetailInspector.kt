@@ -21,7 +21,6 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.IntOffset
@@ -37,6 +36,14 @@ import kotlin.math.roundToInt
 internal fun DetailInspector(ui: EditorUi, editor: EditorViewModel) {
     val detail=ui.detail ?: return
     val local=ui.tool==EditorTool.LOCAL
+    var viewport by remember {mutableStateOf(IntSize.Zero)}
+    // Request pixels from the laid-out canvas, outside BoxWithConstraints' measurement
+    // subcomposition. Publishing a rendered frame must not start another measurement request.
+    LaunchedEffect(viewport,detail.center,detail.comparing,detail.revision) {
+        if(viewport.width>0 && viewport.height>0)
+            editor.loadDetail(viewport.width.coerceAtMost(DetailRenderer.MAX_EDGE),
+                viewport.height.coerceAtMost(DetailRenderer.MAX_EDGE))
+    }
     Dialog(onDismissRequest=editor::closeDetail,properties=DialogProperties(usePlatformDefaultWidth=false)) {
         Surface(Modifier.fillMaxSize()) {
             BoxWithConstraints(Modifier.fillMaxSize().systemBarsPadding()) {
@@ -87,12 +94,8 @@ internal fun DetailInspector(ui: EditorUi, editor: EditorViewModel) {
                             BrushSettings(ui,editor,enabled=editable && ui.regionMode!=RegionMode.MOVE)
                         }
                     }
-                    BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().clipToBounds().background(Color(0xff101114)),
-                        contentAlignment=Alignment.Center) {
-                        val density=LocalDensity.current
-                        val width=with(density) {maxWidth.roundToPx()}.coerceIn(1,DetailRenderer.MAX_EDGE)
-                        val height=with(density) {maxHeight.roundToPx()}.coerceIn(1,DetailRenderer.MAX_EDGE)
-                        LaunchedEffect(width,height,detail.center,detail.comparing,detail.revision) {editor.loadDetail(width,height)}
+                    Box(Modifier.weight(1f).fillMaxWidth().onSizeChanged {viewport=it}
+                        .clipToBounds().background(Color(0xff101114)),contentAlignment=Alignment.Center) {
                         detail.bitmap?.let {Image(it.asImageBitmap(),"原尺寸细节图",Modifier.fillMaxSize(),contentScale=ContentScale.None)}
                         if(local && !detail.comparing && detail.bitmap!=null && !detail.loading) {
                             if(ui.showRegion) detail.regionOverlay?.let {

@@ -31,3 +31,5 @@ For this interaction, the relevant existing patent comparisons include [US869284
 ## Shared local controls
 
 The native detail window and overview use the same add/erase modes, coverage visibility, brush diameter and hardness controls. Detail-only view mode changes location through the overview without painting. Original comparison disables brush controls. The control area scrolls within a bounded portion of the screen so the image remains reachable on short displays. Brush settings change future strokes; closing the window retains the current tool draft for application or cancellation.
+
+Detail loading is requested outside the measurement subcomposition, using the measured canvas size together with center, comparison mode and edit revision. Publishing a completed frame does not itself change those request keys. The idle-frame UI regression checks that the bitmap remains visible and does not restart decoding without an edit or viewport change.

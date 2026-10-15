@@ -132,6 +132,24 @@ class EditorExperienceTest {
         assertEquals(initial.manifest,library.read(id).manifest)
         assertArrayEquals(initial.original,library.read(id).original)
     }
+    @Test fun completedDetailFrameStaysVisibleWhileIdle() = withEditor {model,_,_,_ ->
+        tap("人像修图");await {model.ui.value.tool==EditorTool.LOCAL && !model.ui.value.rendering}
+        tap("查看细节")
+        await {model.ui.value.detail?.bitmap!=null && model.ui.value.detail?.loading==false && desc("细节区域画布").exists()}
+        ins.waitForIdleSync();device.waitForIdle()
+        val frame=requireNotNull(model.ui.value.detail?.bitmap)
+        // Observe multiple display frames after initial layout. Repeated decoding used to
+        // make the canvas disappear even with no edit, pan, resize or comparison request.
+        val until=android.os.SystemClock.uptimeMillis()+1500
+        while(android.os.SystemClock.uptimeMillis()<until) {
+            assertFalse("Idle detail must not return to loading",model.ui.value.detail!!.loading)
+            assertSame("Idle detail must retain the rendered bitmap",frame,model.ui.value.detail!!.bitmap)
+            Thread.sleep(25)
+        }
+        assertTrue(desc("细节区域画布").exists())
+        tap("关闭细节");tap("取消调整")
+    }
+
     @Test fun largeTextLandscapeKeepsCanvasAndToolActionsReachable() {
         val scale=device.executeShellCommand("settings get system font_scale").trim()
         try {
