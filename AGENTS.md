@@ -1,6 +1,6 @@
 # Contributor guidance
 
-Read `README.md`, `CONTRIBUTING.md`, and the applicable design documents before implementation. The repository contains an Android foundation app, plain JVM editor-core and native image-core. Use README.md for portable build commands and docs/validation.md for verification scope.
+Read `README.md`, `CONTRIBUTING.md`, and the applicable design documents before implementation. The repository contains an Android foundation app, plain JVM editor-core and native image-core. Use docs/development.md for portable build commands and docs/validation.md for verification scope.
 
 - Use repository-relative configuration and documented environment variables. Keep workstation setup, private data, credentials, signing material, and research-only assets outside tracked product files.
 - Preserve original images. Keep editable state independent from Android UI types and platform file handles.
