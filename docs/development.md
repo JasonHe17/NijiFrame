@@ -7,7 +7,12 @@
 ```sh
 git clone https://github.com/JasonHe17/NijiFrame.git
 cd NijiFrame
+git switch develop
 ```
+
+## 开发分支
+
+`develop` 为常驻开发集成分支，`main` 保留阶段验收成果。功能、修复和文档分支从 `develop` 开始，完成后先合回 `develop`；阶段验收后再合入 `main` 并同步回 `develop`。当前阶段结束时两者可以完全一致，开发过程中允许存在差异。合入和清理约定见[贡献说明](../CONTRIBUTING.md#分支阶段开发与审核)。
 
 ## 环境与检查
 
