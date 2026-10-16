@@ -67,7 +67,10 @@ class ModernEditorTest {
         assertTrue(device.findObject(UiSelector().className("android.widget.EditText")).setText("8"));device.waitForIdle();tap("使用此数值")
         await {device.hasObject(By.text("请输入范围内的有效数值"))}
         assertEquals(0f,model.ui.value.draft!!.exposureEv,0f)
-        assertTrue(device.findObject(UiSelector().className("android.widget.EditText")).setText("0.35"));device.waitForIdle();tap("使用此数值")
+        assertTrue(device.findObject(UiSelector().className("android.widget.EditText")).setText("0.35"));device.waitForIdle()
+        tap("切换正负");await {device.findObject(UiSelector().className("android.widget.EditText")).text=="-0.35"}
+        assertEquals(0f,model.ui.value.draft!!.exposureEv,0f)
+        tap("切换正负");tap("使用此数值")
         await {model.ui.value.draft!!.exposureEv>.34f && !model.ui.value.rendering}
         tap("全部参数");tap("对比度");exact("对比度","20")
         await {model.ui.value.draft!!.contrast>.19f}

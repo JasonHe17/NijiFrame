@@ -212,6 +212,12 @@ private fun ExactValueDialog(label: String,value: Float,range: ClosedFloatingPoi
                 supportingText={Text(if(error) "请输入范围内的有效数值" else "${range.start} 至 ${range.endInclusive}")},
                 keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal,imeAction=ImeAction.Done),
                 keyboardActions=KeyboardActions(onDone={confirm()}),modifier=Modifier.semantics {contentDescription="${label}数值"})
+            if(range.start<0f) TextButton(onClick={
+                parseParameter(input,range,step)?.let {number ->
+                    val opposite=-number
+                    if(opposite in range) {input=parameterText(opposite,step,"");error=false} else error=true
+                } ?: run {error=true}
+            },modifier=Modifier.semantics {contentDescription="切换正负"}) {Text("± 正负切换")}
             Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
                 TextButton(modifier=Modifier.semantics {contentDescription="减少$label"},onClick={parseParameter(input,range,step)?.let {input=parameterText((it-step).coerceIn(range),step,"");error=false}}) {Text("−",fontSize=24.sp)}
                 Text("步进 ${parameterText(step,step,unit)}",Modifier.align(Alignment.CenterVertically),style=MaterialTheme.typography.bodySmall)

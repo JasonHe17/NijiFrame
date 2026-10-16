@@ -16,7 +16,7 @@ The four categories are **调整 / 修饰 / 构图 / 预设**. Category selectio
 | --- | --- | --- |
 | Signed adjustments and angle | Relative tape ruler with a fixed center needle | Move the tape left to increase the value; touching it does not jump the value. No inertia. Reversing at an endpoint responds immediately. |
 | Softening, detail protection, sharpening and brush properties | Thin absolute rail | Full range stays visible; touch/drag the control area to position the value. |
-| All numeric controls | Clickable numeric value | Validated exact input, units, range and increment/decrement buttons. Cancel changes nothing; confirmation records one draft step. |
+| All numeric controls | Clickable numeric value | Validated exact input, units, range, sign toggle and increment/decrement buttons. Cancel changes nothing; confirmation records one draft step. |
 
 Exposure uses 0.05 EV per 8 dp, or 0.01 EV in fine mode. Angle uses 0.5° / 0.1°. Signed integer controls use one unit per 8 dp, or per 24 dp in fine mode. Android touch slop separates horizontal adjustments from vertical panel scrolling. An interrupted adjustment restores its starting value. Each completed gesture creates one draft history step, not one step per sampled motion event.
 
