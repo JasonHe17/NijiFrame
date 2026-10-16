@@ -48,6 +48,7 @@ dependencies {
     implementation libs.coroutines.android
     implementation libs.exif
     implementation libs.androidx.core
+    testImplementation libs.junit
     androidTestImplementation libs.test.runner
     androidTestImplementation libs.junit
     androidTestImplementation libs.test.core

@@ -5,6 +5,8 @@
 | Check | Scope |
 | --- | --- |
 | `:editor-core:test` | v1–v6 resource and parameter round-trip, source hashes, unsupported/corrupt ZIP rejection, history branches, failed-write recovery, geometry bounds/crop handles, no-upscale export dimensions, independent projects, rename/duplicate/delete and migration |
+| `:app:testDebugUnitTest` | Parameter display/engine units, exact-input validation, relative ruler precision and endpoint reversal |
+| `ModernEditorTest` | Exact input, two history scopes, light/dark and independent canvas, recreation, export cancellation, relative ruler, two-finger brush navigation and 320 dp short window at 200% font scale |
 | Native CTest | Neutral identity, known linear-light EV, saturation and warmth, clipping/invalid values, constant-image and impulse sharpening, radial vignette symmetry and strip equivalence, ASan/UBSan |
 | `EditorIntegrationTest` | Real Android ContentResolver/decoders/JNI, self-contained reopen after source deletion, all eight EXIF orientations, geometry and PNG dimensions, grayscale JPEG/GPS omission, sharpening strip seams, cancellation, latest-preview ownership, provider failures and automatic-save/new-viewmodel recovery |
 | `ExportSafetyTest` | Preparation failure, real PNG encoding cancellation, commit-boundary cancellation, completed copy after cancellation, cache/provider errors, fully prepared JPEG/PNG/project output before destination open, and editor cancellation controls |

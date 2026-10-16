@@ -27,7 +27,7 @@ class EditorUiTest {
     private fun freshTree() { if(android.os.Build.VERSION.SDK_INT>=34) instrumentation.uiAutomation.clearCache() }
     private fun text(value: String): UiObject {
         freshTree()
-        return device.findObject(UiSelector().text(value)).also {check(it.waitForExists(10_000)) {"Missing UI text: $value"} }
+        return (device.findObject(UiSelector().description(value)).takeIf {it.exists()} ?: device.findObject(UiSelector().text(value))).also {check(it.waitForExists(10_000)) {"Missing UI text: $value"} }
     }
     private fun tap(value: String) {text(value).click();device.waitForIdle();freshTree()}
     private fun description(value: String): UiObject {
@@ -68,8 +68,8 @@ class EditorUiTest {
         var scenario: ActivityScenario<MainActivity>?=null
         try {
             scenario=ActivityScenario.launch(MainActivity::class.java)
-            await {device.hasObject(By.text("导入照片")) || device.hasObject(By.text("项目"))}
-            if(device.hasObject(By.text("项目"))) tap("项目")
+            await {device.hasObject(By.text("导入照片")) || device.hasObject(By.desc("项目"))}
+            if(device.hasObject(By.desc("项目"))) tap("项目")
             tap("导入照片")
             description("Show roots").click();device.waitForIdle()
             device.findObject(UiSelector().resourceId("android:id/title").text("Downloads")).click()
@@ -95,18 +95,18 @@ class EditorUiTest {
             assertTrue("Dragging a zoomed image must pan",kotlin.math.abs(sample()-zoomed)>2)
             tap("适应画布")
             assertTrue(kotlin.math.abs(sample()-beforeZoom)<=2)
-            tap("明暗");moveSlider("曝光调整",.75f)
+            tap("明暗");moveSlider("曝光调整",.1f)
             text("调整待应用")
             tap("取消调整")
             assertEquals(0f,library.read(id).manifest.edit.exposureEv)
-            tap("明暗");moveSlider("曝光调整",.75f)
+            tap("明暗");moveSlider("曝光调整",.1f)
             // Activity recreation retains an in-progress tool, without persisting an uncommitted draft.
             scenario.recreate();text("调整待应用");text("应用调整")
             tap("应用调整")
             await {library.read(id).manifest.edit.exposureEv>.5f}
             tap("撤销");await {library.read(id).manifest.edit.exposureEv==0f}
             tap("重做");await {library.read(id).manifest.edit.exposureEv>.5f}
-            tap("裁剪");tap("1:1")
+            tap("构图");tap("裁剪");tap("1:1")
             val bounds=description("裁剪框，拖动四角或框内调整").visibleBounds
             val imageHeight=bounds.width()*640f/960
             val bottom=bounds.exactCenterY()+imageHeight/2
@@ -119,13 +119,13 @@ class EditorUiTest {
             assertTrue(kotlin.math.abs(crop.width-crop.height)<=1)
             tap("旋转");tap("水平翻转");tap("应用调整")
             await {library.read(id).manifest.edit.flipHorizontal}
-            tap("细节");moveSlider("锐化调整",.6f);device.pressBack()
+            tap("调整");tap("锐化与暗角");moveSlider("锐化调整",.6f);device.pressBack()
             text("当前工具还有未完成的调整");tap("放弃本次调整")
-            tap(name);assertEquals(0f,library.read(id).manifest.edit.sharpen)
+            assertEquals(0f,library.read(id).manifest.edit.sharpen)
             // Check landscape layout and tool availability; edits survive reconfiguration.
             scenario.onActivity {it.requestedOrientation=ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE}
             text("导出");tap("颜色");text("饱和度")
-            moveSlider("饱和度调整",.35f);tap("应用调整")
+            moveSlider("饱和度调整",.75f);tap("应用调整")
             await {library.read(id).manifest.edit.saturation<1f}
             scenario.onActivity {it.requestedOrientation=ActivityInfo.SCREEN_ORIENTATION_PORTRAIT}
             text("导出");tap("导出");tap("PNG");tap("保存照片")

@@ -93,7 +93,7 @@ class LocalEditingTest {
     @Test fun realBrushEraseUndoCancelApplyAndReopen() {
         val device=UiDevice.getInstance(instrumentation)
         fun fresh() {if(android.os.Build.VERSION.SDK_INT>=34) instrumentation.uiAutomation.clearCache()}
-        fun find(text: String): UiObject {fresh();return device.findObject(UiSelector().text(text)).also {check(it.waitForExists(10000)){"Missing $text"}}}
+        fun find(text: String): UiObject {fresh();return (device.findObject(UiSelector().description(text)).takeIf {it.exists()} ?: device.findObject(UiSelector().text(text))).also {check(it.waitForExists(10000)){"Missing $text"}}}
         fun tap(text: String) {find(text).click();device.waitForIdle();fresh()}
         fun desc(label: String): UiObject {fresh();return device.findObject(UiSelector().description(label))}
         fun await(check: ()->Boolean) {val end=System.currentTimeMillis()+20000;while(System.currentTimeMillis()<end){if(runCatching(check).getOrDefault(false))return;Thread.sleep(100)};assertTrue(check())}
@@ -113,7 +113,7 @@ class LocalEditingTest {
         val id=library.create(project.copy(manifest=project.manifest.copy(name="Local test")));bitmap.recycle()
         val scenario=ActivityScenario.launch(MainActivity::class.java)
         try {
-            await {desc("编辑预览").exists()};tap("局部")
+            await {desc("编辑预览").exists()};tap("修饰");tap("编辑选区");tap("添加区域")
             await {desc("局部区域画布").exists()}
             val bounds=desc("局部区域画布").visibleBounds
             device.swipe(bounds.centerX(),bounds.centerY(),bounds.centerX()+30,bounds.centerY()+30,12);device.waitForIdle()
@@ -124,9 +124,9 @@ class LocalEditingTest {
             tap("调整效果")
             scrollTo("局部曝光调整")
             val slider=desc("局部曝光调整").visibleBounds
-            device.swipe(slider.centerX(),slider.centerY(),slider.left+slider.width()*3/4,slider.centerY(),15)
+            device.swipe(slider.centerX(),slider.centerY(),slider.left+slider.width()/10,slider.centerY(),15)
             device.waitForIdle()
-            tap("柔肤（实验）")
+            scrollTo("全部参数");tap("全部参数");tap("柔肤")
             scrollTo("柔肤强度调整")
             val soften=desc("柔肤强度调整").visibleBounds
             device.swipe(soften.left+8,soften.centerY(),soften.centerX(),soften.centerY(),15)
@@ -140,7 +140,7 @@ class LocalEditingTest {
             assertEquals(expectedPoint.x,actualPoint.x,.015f);assertEquals(expectedPoint.y,actualPoint.y,.015f)
             tap("撤销");await {library.read(id).manifest.edit.local.region.strokes.isEmpty()}
             tap("重做");await {library.read(id).manifest.edit==saved}
-            tap("局部")
+            tap("修饰");tap("编辑选区");tap("添加区域")
             tap("移动画布")
             // Hiding the overlay also exposes the photo's accessibility node underneath it.
             desc("显示区域").click();device.waitForIdle()
@@ -158,8 +158,10 @@ class LocalEditingTest {
             assertEquals(saved,library.read(id).manifest.edit)
             if(device.executeShellCommand("settings get secure navigation_mode").trim()=="2") {
                 // Slider exclusion must leave Back available elsewhere on the screen edge.
-                tap("局部")
-                val edgeY=desc("局部区域画布").visibleBounds.centerY()
+                tap("修饰");tap("编辑选区");tap("添加区域")
+                val edgeCanvas=desc("局部区域画布").visibleBounds
+                device.click(edgeCanvas.centerX(),edgeCanvas.centerY());device.waitForIdle()
+                val edgeY=edgeCanvas.centerY()
                 device.swipe(1,edgeY,device.displayWidth/4,edgeY,20)
                 find("当前工具还有未完成的调整")
                 tap("放弃本次调整")

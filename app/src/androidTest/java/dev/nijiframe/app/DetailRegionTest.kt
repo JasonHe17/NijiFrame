@@ -99,7 +99,7 @@ class DetailRegionTest {
             assertTrue(condition())
         }
         fun actionable(label: String): UiObject2? {
-            fresh();var node=device.findObject(By.text(label)) ?: return null
+            fresh();var node=(device.findObject(By.desc(label)) ?: device.findObject(By.text(label))) ?: return null
             while(!node.isClickable) node=node.parent ?: return null
             return node.takeIf {it.isEnabled}
         }
@@ -166,7 +166,7 @@ class DetailRegionTest {
             assertTrue("Touch injection failed",device.click(x,y));record("click returned")
         }
         try {
-            await {desc("编辑预览").exists()};tap("局部");tap("查看细节");ready(0)
+            await {desc("编辑预览").exists()};tap("修饰");tap("编辑选区");tap("添加区域");tap("查看细节");ready(0)
             selectMode("擦除区域",RegionMode.ERASE)
             var canvas=desc("细节区域画布").visibleBounds
             // The small native frame is centered, with blank space around it.
@@ -181,7 +181,7 @@ class DetailRegionTest {
             tap("查看调整");ready(1)
             tap("关闭细节");tap("取消调整")
             assertEquals(initial,library.read(id).manifest.edit)
-            tap("局部");tap("查看细节");ready(0);selectMode("擦除区域",RegionMode.ERASE)
+            tap("修饰");tap("编辑选区");tap("添加区域");tap("查看细节");ready(0);selectMode("擦除区域",RegionMode.ERASE)
             canvas=desc("细节区域画布").visibleBounds
             val frameBounds=nativeFrame(canvas)
             clickFrame(frameBounds.left+210,frameBounds.top+240);device.waitForIdle();ready(1)

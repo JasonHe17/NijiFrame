@@ -64,7 +64,7 @@ internal fun DetailInspector(ui: EditorUi, editor: EditorViewModel) {
                         val ratio=min(overviewSize.width.toFloat()/detail.outputWidth,overviewSize.height.toFloat()/detail.outputHeight)
                         val pictureWidth=detail.outputWidth*ratio;val pictureHeight=detail.outputHeight*ratio
                         val left=(overviewSize.width-pictureWidth)/2;val top=(overviewSize.height-pictureHeight)/2
-                        Canvas(Modifier.fillMaxWidth().height(132.dp).background(Color(0xff17181b))
+                        Canvas(Modifier.fillMaxWidth().height(132.dp).background(LocalEditorCanvas.current)
                             .onSizeChanged {overviewSize=it}.semantics {contentDescription="选择细节区域"}
                             .pointerInput(overviewSize,detail.outputWidth,detail.outputHeight) {
                                 detectTapGestures {point ->
@@ -95,7 +95,7 @@ internal fun DetailInspector(ui: EditorUi, editor: EditorViewModel) {
                         }
                     }
                     Box(Modifier.weight(1f).fillMaxWidth().onSizeChanged {viewport=it}
-                        .clipToBounds().background(Color(0xff101114)),contentAlignment=Alignment.Center) {
+                        .clipToBounds().background(LocalEditorCanvas.current),contentAlignment=Alignment.Center) {
                         detail.bitmap?.let {Image(it.asImageBitmap(),"原尺寸细节图",Modifier.fillMaxSize(),contentScale=ContentScale.None)}
                         if(local && !detail.comparing && detail.bitmap!=null && !detail.loading) {
                             if(ui.showRegion) detail.regionOverlay?.let {
@@ -104,7 +104,7 @@ internal fun DetailInspector(ui: EditorUi, editor: EditorViewModel) {
                             if(!ui.busy && ui.regionMode!=RegionMode.MOVE) DetailRegionInput(ui,editor)
                         }
                         if(detail.loading) CircularProgressIndicator()
-                        detail.error?.let {Text(it,Modifier.padding(16.dp),color=Color.White)}
+                        detail.error?.let {Text(it,Modifier.padding(16.dp),color=MaterialTheme.colorScheme.error)}
                     }
                     Text(if(compact && local) "1:1 显示 · 修改草稿，关闭后应用或取消"
                         else if(local) "1 个图像像素对应 1 个屏幕像素。涂抹修改当前草稿；关闭后应用或取消调整。原图对比时不能涂抹。"

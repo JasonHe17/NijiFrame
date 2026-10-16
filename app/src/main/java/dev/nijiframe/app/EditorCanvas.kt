@@ -6,6 +6,8 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.rememberTransformableState
@@ -44,8 +46,8 @@ internal fun EditorCanvas(ui: EditorUi, editor: EditorViewModel, modifier: Modif
     val cropMode=ui.tool==EditorTool.CROP && !ui.comparing
     val localMode=ui.tool==EditorTool.LOCAL && !ui.comparing
     val painting=localMode && ui.regionMode!=RegionMode.MOVE
-    LaunchedEffect(cropMode) {zoom=1f;pan=Offset.Zero}
-    val state=rememberTransformableState { factor,delta,_ ->
+    LaunchedEffect(cropMode,ui.fitRevision) {zoom=1f;pan=Offset.Zero}
+    val transform: (Float,Offset)->Unit = { factor,delta ->
         if(!cropMode && bitmap!=null) {
             zoom=(zoom*factor).coerceIn(1f,8f)
             val scale=min(size.width.toFloat()/bitmap.width,size.height.toFloat()/bitmap.height)
@@ -54,7 +56,8 @@ internal fun EditorCanvas(ui: EditorUi, editor: EditorViewModel, modifier: Modif
             pan=Offset((pan.x+delta.x).coerceIn(-maxX,maxX),(pan.y+delta.y).coerceIn(-maxY,maxY))
         }
     }
-    Box(modifier.clipToBounds().background(Color(0xff101114)).onSizeChanged {size=it}
+    val state=rememberTransformableState {factor,delta,_->transform(factor,delta)}
+    Box(modifier.clipToBounds().background(LocalEditorCanvas.current).onSizeChanged {size=it}
         .then(if(cropMode || painting) Modifier else Modifier.transformable(state).pointerInput(ui.projectId) {
             detectTapGestures(onDoubleTap={zoom=if(zoom>1f) 1f else 2f;pan=Offset.Zero})
         }),contentAlignment=Alignment.Center) {
@@ -62,7 +65,7 @@ internal fun EditorCanvas(ui: EditorUi, editor: EditorViewModel, modifier: Modif
             Modifier.fillMaxSize().graphicsLayer {scaleX=zoom;scaleY=zoom;translationX=pan.x;translationY=pan.y},contentScale=ContentScale.Fit) }
         if(cropMode && !ui.rendering && ui.project!=null && ui.draft!=null && bitmap!=null) {
             val (width,height)=Geometry.canvasSize(ui.project.manifest.width,ui.project.manifest.height,ui.draft.turns)
-            CropOverlay(ui.draft.crop ?: Crop(0,0,width,height),width,height,ui.cropAspect) {
+            CropOverlay(ui.draft.crop ?: Crop(0,0,width,height),width,height,ui.cropAspect,onFinished=editor::localCheckpoint) {
                 editor.updateDraft(ui.draft.copy(crop=it))
             }
         }
@@ -71,22 +74,16 @@ internal fun EditorCanvas(ui: EditorUi, editor: EditorViewModel, modifier: Modif
                 Image(overlay.asImageBitmap(),"已选择的局部区域",Modifier.fillMaxSize()
                     .graphicsLayer {scaleX=zoom;scaleY=zoom;translationX=pan.x;translationY=pan.y},contentScale=ContentScale.Fit)
             }
-            if(painting && !ui.busy) RegionInput(ui,editor,size,zoom,pan)
+            if(painting && !ui.busy) RegionInput(ui,editor,size,zoom,pan,transform)
         }
         if(ui.rendering) LinearProgressIndicator(Modifier.fillMaxWidth().align(Alignment.TopCenter))
         if(ui.approximatePreview) Surface(Modifier.align(Alignment.TopEnd).padding(8.dp),shape=MaterialTheme.shapes.small) {
             Text(if(ui.rendering) "快速预览 · 正在精算" else "缩略预览 · 以导出效果为准",Modifier.padding(8.dp),style=MaterialTheme.typography.labelSmall)
         }
         if(ui.comparing) Surface(Modifier.align(Alignment.TopStart).padding(12.dp),shape=MaterialTheme.shapes.small) {
-            Text("原图",Modifier.padding(8.dp),style=MaterialTheme.typography.labelMedium)
+            Text("原图 · 保持构图",Modifier.padding(8.dp),style=MaterialTheme.typography.labelMedium)
         }
-        if(!cropMode) Surface(Modifier.align(Alignment.BottomEnd).padding(8.dp),shape=MaterialTheme.shapes.small,
-            color=MaterialTheme.colorScheme.surface.copy(alpha=.9f)) {
-            Row {
-                TextButton(onClick=editor::openDetail,enabled=!ui.busy && !ui.rendering && bitmap!=null) {Text("查看细节")}
-                TextButton(onClick={zoom=1f;pan=Offset.Zero}) {Text("适应画布")}
-            }
-        }
+
     }
 }
 
@@ -97,7 +94,7 @@ private fun imageBounds(size: IntSize,width: Int,height: Int): Rect {
 }
 
 @Composable
-private fun CropOverlay(crop: Crop,width: Int,height: Int,aspect: Float?,onCrop: (Crop)->Unit) {
+private fun CropOverlay(crop: Crop,width: Int,height: Int,aspect: Float?,onFinished: ()->Unit,onCrop: (Crop)->Unit) {
     var size by remember {mutableStateOf(IntSize.Zero)}
     val current by rememberUpdatedState(crop)
     val callback by rememberUpdatedState(onCrop)
@@ -122,7 +119,7 @@ private fun CropOverlay(crop: Crop,width: Int,height: Int,aspect: Float?,onCrop:
                     change.consume();delta+=amount
                     callback(CropGesture.drag(start,delta.x/scale,delta.y/scale,width,height,selected,aspect))
                 }
-            },onDragEnd={handle=null},onDragCancel={handle=null})
+            },onDragEnd={if(handle!=null) onFinished();handle=null},onDragCancel={if(handle!=null) callback(start);handle=null})
         }) {
         val frame=imageBounds(IntSize(size.width.toInt(),size.height.toInt()),width,height)
         val scale=frame.width/width
@@ -146,51 +143,60 @@ private fun CropOverlay(crop: Crop,width: Int,height: Int,aspect: Float?,onCrop:
 }
 
 @Composable
-private fun RegionInput(ui: EditorUi,editor: EditorViewModel,size: IntSize,zoom: Float,pan: Offset) {
+private fun RegionInput(ui: EditorUi,editor: EditorViewModel,size: IntSize,zoom: Float,pan: Offset,onTransform: (Float,Offset)->Unit) {
     val manifest=requireNotNull(ui.project).manifest
     val edit=requireNotNull(ui.draft)
     val (w,h)=Geometry.outputSize(manifest.width,manifest.height,edit)
     val mapping=remember(manifest.width,manifest.height,edit) {SourceGeometry(manifest.width,manifest.height,edit)}
     val bounds=imageBounds(size,w,h)
     var pending by remember {mutableStateOf<List<MaskPoint>>(emptyList())}
+    val currentZoom by rememberUpdatedState(zoom)
+    val currentPan by rememberUpdatedState(pan)
+    val transform by rememberUpdatedState(onTransform)
     fun screen(point: MaskPoint): Offset {
         val output=mapping.toOutput(point)
         return Offset((bounds.left+output.x*bounds.width/w-size.width/2f)*zoom+size.width/2f+pan.x,
             (bounds.top+output.y*bounds.height/h-size.height/2f)*zoom+size.height/2f+pan.y)
     }
     Canvas(Modifier.fillMaxSize().semantics {contentDescription="局部区域画布"}
-        .pointerInput(mapping,size,zoom,pan,ui.regionMode,ui.brushRadius,ui.brushHardness) {
+        .pointerInput(mapping,size,ui.regionMode,ui.brushRadius,ui.brushHardness) {
             if(bounds.width<=0) return@pointerInput
             awaitEachGesture {
                 val down=awaitFirstDown(requireUnconsumed=false)
+                val gestureZoom=currentZoom;val gesturePan=currentPan
                 fun convert(p: Offset): MaskPoint? {
-                    val px=(p.x-size.width/2f-pan.x)/zoom+size.width/2f
-                    val py=(p.y-size.height/2f-pan.y)/zoom+size.height/2f
+                    val px=(p.x-size.width/2f-gesturePan.x)/gestureZoom+size.width/2f
+                    val py=(p.y-size.height/2f-gesturePan.y)/gestureZoom+size.height/2f
                     return mapping.toSource((px-bounds.left)*w/bounds.width,(py-bounds.top)*h/bounds.height)
                 }
                 val start=convert(down.position)
-                if(start!=null) {
-                    down.consume();pending=listOf(start)
-                    var cancelled=false
-                    try {
-                        while(true) {
-                            val event=awaitPointerEvent()
-                            if(event.changes.count {it.pressed}>1) {cancelled=true;break}
+                var navigating=false
+                if(start!=null) {down.consume();pending=listOf(start)}
+                try {
+                    while(true) {
+                        val event=awaitPointerEvent()
+                        if(event.changes.count {it.pressed}>1) {
+                            navigating=true;pending=emptyList()
+                            transform(event.calculateZoom(),event.calculatePan())
+                            event.changes.forEach {it.consume()}
+                        } else if(!navigating && start!=null) {
                             val change=event.changes.firstOrNull {it.id==down.id} ?: break
                             val point=convert(change.position)
                             if(point!=null && pending.size<Region.MAX_POINTS) {
                                 val last=pending.last()
-                                // Bound event density in source units, not screen pixels.
                                 if(hypot((point.x-last.x)*manifest.width,(point.y-last.y)*manifest.height)>=
                                     max(1f,ui.brushRadius*min(manifest.width,manifest.height)*.1f) || !change.pressed)
                                     pending=pending+point
                             }
                             change.consume()
-                            if(!change.pressed) break
                         }
-                        if(!cancelled) editor.addStroke(pending)
-                    } finally {pending=emptyList()}
-                }
+                        // After a second finger appears, never resume this stroke on the remaining finger.
+                        if(event.changes.none {it.pressed}) {
+                            if(!navigating && pending.isNotEmpty()) editor.addStroke(pending)
+                            break
+                        }
+                    }
+                } finally {pending=emptyList()}
             }
         }) {
         // A single centerline indicates the pending gesture; the raster overlay shows exact coverage after release.

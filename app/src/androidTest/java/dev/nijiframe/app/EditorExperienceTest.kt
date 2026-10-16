@@ -24,7 +24,7 @@ class EditorExperienceTest {
         assertTrue("UI condition did not complete",check())
     }
     private fun node(text: String): UiObject2? {
-        fresh();var n=device.findObject(By.text(text)) ?: return null
+        fresh();var n=(device.findObject(By.desc(text)) ?: device.findObject(By.text(text))) ?: return null
         while(!n.isClickable) n=n.parent ?: return null
         return n
     }
@@ -71,7 +71,7 @@ class EditorExperienceTest {
         val initial=library.read(id)
         evidence("overview")
         tap("明暗");await {model.ui.value.tool==EditorTool.LIGHT}
-        slider("曝光调整",.75f)
+        slider("曝光调整",.1f)
         await {model.ui.value.draft!!.exposureEv>.5f && !model.ui.value.rendering}
         val draft=model.ui.value.draft
         tap("导出");await {device.hasObject(By.text("导出与分享"))}
@@ -91,11 +91,12 @@ class EditorExperienceTest {
 
     @Test fun portraitStepsShareBrushControlsAndKeepComparisonReadOnly() = withEditor { model,library,id,scenario ->
         val initial=library.read(id)
-        tap("人像修图");await {model.ui.value.tool==EditorTool.LOCAL && !model.ui.value.rendering && desc("局部区域画布").exists()}
+        tap("修饰");tap("编辑选区");tap("添加区域");await {model.ui.value.tool==EditorTool.LOCAL && !model.ui.value.rendering && desc("局部区域画布").exists()}
         tap("调整效果");await {model.ui.value.regionMode==RegionMode.MOVE && !model.ui.value.showRegion}
         // StateFlow publication can precede Compose and accessibility updates.
         // Wait for the rendered mode as well; never repeat the user action.
         await {node("调整效果")?.isChecked==true && !desc("局部区域画布").exists()}
+        tap("调整效果") // Re-selecting the same phase must retain the previous brush mode.
         tap("选区与修正");await {model.ui.value.regionMode==RegionMode.ADD && model.ui.value.showRegion &&
             node("选区与修正")?.isChecked==true && desc("局部区域画布").exists()}
         val canvas=desc("局部区域画布").visibleBounds
@@ -133,7 +134,7 @@ class EditorExperienceTest {
         assertArrayEquals(initial.original,library.read(id).original)
     }
     @Test fun completedDetailFrameStaysVisibleWhileIdle() = withEditor {model,_,_,_ ->
-        tap("人像修图");await {model.ui.value.tool==EditorTool.LOCAL && !model.ui.value.rendering}
+        tap("修饰");tap("编辑选区");tap("添加区域");await {model.ui.value.tool==EditorTool.LOCAL && !model.ui.value.rendering}
         tap("查看细节")
         await {model.ui.value.detail?.bitmap!=null && model.ui.value.detail?.loading==false && desc("细节区域画布").exists()}
         ins.waitForIdleSync();device.waitForIdle()
@@ -159,7 +160,7 @@ class EditorExperienceTest {
                 device.setOrientationLeft()
                 await {device.displayWidth>device.displayHeight}
                 val initial=library.read(id).manifest
-                tap("人像修图");await {model.ui.value.tool==EditorTool.LOCAL && !model.ui.value.rendering && desc("局部区域画布").exists()}
+                tap("修饰");tap("编辑选区");tap("添加区域");await {model.ui.value.tool==EditorTool.LOCAL && !model.ui.value.rendering && desc("局部区域画布").exists()}
                 val canvas=desc("局部区域画布").visibleBounds
                 assertTrue("Landscape retains a usable canvas",canvas.width()>80 && canvas.height()>80)
                 assertTrue(requireNotNull(node("应用调整")).visibleBounds.height()>0)

@@ -29,7 +29,7 @@ class DetailInspectorTest {
         }
         fun actionable(label: String): UiObject2? {
             fresh()
-            var node=device.findObject(By.text(label)) ?: return null
+            var node=(device.findObject(By.desc(label)) ?: device.findObject(By.text(label))) ?: return null
             // Compose's Text child stays enabled while its enclosing button is disabled during rendering.
             while(!node.isClickable) node=node.parent ?: return null
             return node.takeIf {it.isEnabled}

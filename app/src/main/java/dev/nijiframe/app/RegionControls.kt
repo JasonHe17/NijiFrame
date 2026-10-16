@@ -4,7 +4,6 @@ package dev.nijiframe.app
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.systemGestureExclusion
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -13,7 +12,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import java.util.Locale
 import kotlin.math.min
 import kotlin.math.roundToInt
 
@@ -55,14 +53,17 @@ internal fun BrushSettings(ui: EditorUi, editor: EditorViewModel, enabled: Boole
         FilterChip(selected=hardness,onClick={hardness=true},label={Text("边缘硬度")},enabled=enabled)
     }
     if(hardness) {
-        Text(String.format(Locale.ROOT,"边缘硬度 %.0f%%",ui.brushHardness*100),style=MaterialTheme.typography.labelMedium)
-        Slider(value=ui.brushHardness,onValueChange=editor::brushHardness,valueRange=0f..1f,enabled=enabled,
-            modifier=Modifier.systemGestureExclusion().semantics {contentDescription="区域边缘硬度"})
+        key("hardness") {
+            ParameterControl("brush-hardness","边缘硬度",ui.brushHardness*100,0f..100f,50f,"%",ruler=false,
+                description="区域边缘硬度",enabled=enabled,onChange={editor.brushHardness(it/100)},onFinished={})
+        }
     } else {
         val m=ui.project?.manifest
         val pixels=if(m==null) 0 else (ui.brushRadius*2*min(m.width,m.height)).roundToInt()
-        Text(String.format(Locale.ROOT,"直径 %.1f%% · %d 原图像素",ui.brushRadius*200,pixels),style=MaterialTheme.typography.labelMedium)
-        Slider(value=ui.brushRadius,onValueChange=editor::brushRadius,valueRange=.005f.. .25f,enabled=enabled,
-            modifier=Modifier.systemGestureExclusion().semantics {contentDescription="区域笔刷大小"})
+        key("radius") {
+            ParameterControl("brush-radius","笔刷直径",ui.brushRadius*200,1f..50f,12f,"%",ruler=false,step=.1f,
+                description="区域笔刷大小",enabled=enabled,onChange={editor.brushRadius(it/200)},onFinished={})
+        }
+        Text("$pixels 原图像素",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
