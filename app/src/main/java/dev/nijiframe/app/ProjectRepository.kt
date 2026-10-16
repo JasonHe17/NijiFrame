@@ -100,10 +100,8 @@ class ProjectRepository(private val context: Context,
     }
     fun checkPhotoExport(project: Project, source: Bitmap, settings: ExportSettings) {
         val m = project.manifest
-        val sample = ImageSizing.exportSample(m, settings)
-        val reusable = source.width == m.width && source.height == m.height && sample == 1
-        val required = ImageSizing.exportWorkingBytes(m, sample, reusable, settings.maxEdge != null) +
-            (if(reusable) 0 else ImagePipeline.inspect(project.original,project.manifest.honorExifColorSpace).codecHeadroom)
+        val required = photoExportRequired(m, settings, source.width, source.height,
+            ImagePipeline.inspect(project.original,m.honorExifColorSpace).codecHeadroom)
         if (required > availableMemory()) {
             // Previous projects/previews can be unreachable but not collected yet. Recheck once before refusal.
             // This runs on a worker, and never raises the budget or substitutes a lower resolution.

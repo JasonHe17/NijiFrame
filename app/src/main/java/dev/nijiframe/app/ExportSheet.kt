@@ -12,7 +12,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import dev.nijiframe.editor.Geometry
-import dev.nijiframe.editor.ImageSizing
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -26,6 +25,11 @@ internal fun ExportSheet(ui: EditorUi,editor: EditorViewModel,onDismiss: ()->Uni
     val (width,height)=Geometry.outputSize(project.manifest.width,project.manifest.height,edit)
     val (outWidth,outHeight)=settings.dimensions(width,height)
     val pending=ui.draft!=null && ui.draft!=project.manifest.edit
+    var assessmentRefresh by remember {mutableIntStateOf(0)}
+    val assessment by produceState<PhotoExportAssessment?>(null,edit,settings,assessmentRefresh) {
+        value=null
+        value=editor.photoExportAssessment(edit,settings)
+    }
     ModalBottomSheet(onDismissRequest=onDismiss,sheetState=rememberModalBottomSheetState(skipPartiallyExpanded=true)) {
         Column(Modifier.fillMaxWidth().padding(horizontal=24.dp).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(12.dp)) {
             Text("导出与分享",style=MaterialTheme.typography.titleLarge)
@@ -50,15 +54,23 @@ internal fun ExportSheet(ui: EditorUi,editor: EditorViewModel,onDismiss: ()->Uni
                         }
                     }
                 }
-                if(ImageSizing.previewSample(project.manifest.width,project.manifest.height)>1)
-                    Text("原图完整保留。原尺寸输出需要更多内存，可选择较小尺寸降低负担。",style=MaterialTheme.typography.bodySmall)
+                if(assessment?.fits==false) {
+                    Text("当前内存预计不足以导出此尺寸，原图与工程仍保留。请选择较小尺寸，或先导出可编辑工程。",
+                        color=MaterialTheme.colorScheme.error,style=MaterialTheme.typography.bodyMedium)
+                    assessment?.suggestedEdge?.let {edge ->
+                        TextButton(onClick={editor.setExportSettings(settings.copy(maxEdge=edge))}) {Text("改用长边 $edge")}
+                    }
+                    TextButton(onClick={assessmentRefresh++}) {Text("重新检查内存")}
+                }
+                Text("导出需要临时存储空间，内存检查不能保证一定成功；不会自动缩小所选尺寸。",style=MaterialTheme.typography.bodySmall)
+                TextButton(enabled=!ui.rendering,onClick={onDismiss();editor.openDetail()}) {Text("查看原尺寸细节")}
                 Text("照片输出为 8 位 sRGB / SDR，不附带位置等原始元数据。",style=MaterialTheme.typography.bodySmall)
             }
             if(pending) Text("确认后会应用并保存当前调整；关闭面板可继续编辑。",style=MaterialTheme.typography.bodySmall)
-            Button(shape=androidx.compose.foundation.shape.RoundedCornerShape(8.dp),onClick=if(projectOutput) onSaveProject else onSavePhoto,modifier=Modifier.fillMaxWidth()) {
+            Button(enabled=projectOutput || assessment?.fits==true,shape=androidx.compose.foundation.shape.RoundedCornerShape(8.dp),onClick=if(projectOutput) onSaveProject else onSavePhoto,modifier=Modifier.fillMaxWidth()) {
                 Text(if(pending) "应用并导出" else if(projectOutput) "导出可编辑工程" else "保存照片")
             }
-            if(!projectOutput) TextButton(onClick=onShare,modifier=Modifier.fillMaxWidth()) {Text(if(pending) "应用并分享" else "分享照片")}
+            if(!projectOutput) TextButton(enabled=assessment?.fits==true,onClick=onShare,modifier=Modifier.fillMaxWidth()) {Text(if(pending) "应用并分享" else "分享照片")}
             TextButton(onClick=onDismiss,modifier=Modifier.fillMaxWidth()) {Text("取消")}
             Spacer(Modifier.height(12.dp))
         }

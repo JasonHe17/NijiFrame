@@ -507,6 +507,23 @@ class EditorViewModel @JvmOverloads constructor(application: Application,
         preferences.edit().putString("format",settings.format.name).putInt("quality",settings.quality)
             .putInt("edge",settings.maxEdge ?: 0).apply()
     }
+    internal suspend fun photoExportAssessment(edit: Edit, settings: ExportSettings): PhotoExportAssessment? {
+        val project=mutable.value.project ?: return null
+        val bitmap=source ?: return null
+        val width=bitmap.width;val height=bitmap.height
+        return withContext(Dispatchers.Default) {
+            val manifest=project.manifest.copy(edit=edit)
+            val codec=ImagePipeline.inspect(project.original,manifest.honorExifColorSpace).codecHeadroom
+            var assessment=assessPhotoExport(manifest,settings,width,height,codec,ImageMemory.available(getApplication()))
+            if(!assessment.fits) {
+                // Match export admission's one collection before reporting a refusal.
+                System.gc()
+                currentCoroutineContext().ensureActive()
+                assessment=assessPhotoExport(manifest,settings,width,height,codec,ImageMemory.available(getApplication()))
+            }
+            assessment
+        }
+    }
     fun prepareExport(destination: ExportDestination) = action("正在保存修改") {
         saveCurrentIfNeeded()
         val settings=mutable.value.exportSettings

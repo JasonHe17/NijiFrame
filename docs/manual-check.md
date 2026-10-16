@@ -1,5 +1,25 @@
 # A short manual check
 
+## Two short phone tasks
+
+These tasks are pending until someone runs them on a physical phone. Use normal
+photos, a short session and new output names; no stress inputs or test runner is
+needed. Record each task separately, even when the first one fails.
+
+| Task | Steps | Record |
+| --- | --- | --- |
+| Quick improvement | Import an ordinary JPEG, adjust exposure or apply a preset, compare, apply, wait for saved, export a 2048-edge JPEG and open it in the phone gallery | Total time, help needed, mistakes, visible color/orientation, actual output dimensions, failure stage |
+| Local edit and continuation | Import or duplicate a normal photo, paint a small local region, adjust its exposure, inspect native detail, apply and wait for saved. Close/reopen the app, verify region/parameters, export PNG and a `.nijiproj`, then reopen that project | Time to find each tool, accidental strokes, successful recovery, dimensions, original unchanged, errors |
+
+For each record include app version/source revision from About, phone model,
+Android version, input format/dimensions, whether the package was an in-place
+upgrade, and pass/fail/not-run. Keep photo files and identifying metadata local.
+Do not upload private photos or treat personal trial notes as public fixtures.
+If installation reports a signature mismatch, export important projects with the
+old app before considering a separate installation. See [release preparation](releases.md).
+
+## Additional checks
+
 Use a copy of a small sRGB JPEG or opaque PNG (about 2MP is a useful starting point). On a daily-use phone, ordinary short editing sessions are sufficient: no root, bootloader changes, malformed inputs, stress loops or instrumentation test APKs are needed. These do not replace device compatibility testing. Development builds can crash or lose uncommitted edits; back up important projects and choose new export filenames.
 
 1. Import and check orientation/color. Duplicate the project before experimenting.

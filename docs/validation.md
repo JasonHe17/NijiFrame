@@ -2,6 +2,10 @@
 
 ## Repeatable checks
 
+Current failure categories, evidence collection and release gates are tracked in
+[the reliability baseline](reliability.md). Preparation failures are not passing
+application tests; historical intermittent crashes remain open separately.
+
 | Check | Scope |
 | --- | --- |
 | `:editor-core:test` | v1–v6 resource and parameter round-trip, source hashes, unsupported/corrupt ZIP rejection, history branches, failed-write recovery, geometry bounds/crop handles, no-upscale export dimensions, independent projects, rename/duplicate/delete and migration |

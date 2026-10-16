@@ -40,26 +40,54 @@ class ModernEditorTest {
         device.executeShellCommand("mkdir -p /sdcard/Download/nijiframe-test-evidence")
         device.executeShellCommand("screencap -p /sdcard/Download/nijiframe-test-evidence/modern-$name.png")
     }
-    private fun withEditor(block: (EditorViewModel,ProjectLibrary,String,ActivityScenario<MainActivity>)->Unit) {
+    private fun withEditor(large: Boolean=false,block: (EditorViewModel,ProjectLibrary,String,ActivityScenario<MainActivity>)->Unit) {
         val library=ProjectLibrary(File(context.filesDir,"library"));val previous=library.latest()
         val image=Bitmap.createBitmap(900,600,Bitmap.Config.ARGB_8888)
         for(y in 0 until 600) for(x in 0 until 900) image.setPixel(x,y,Color.rgb(x*255/900,y*255/600,128))
         val original=ByteArrayOutputStream().also {image.compress(Bitmap.CompressFormat.PNG,100,it)}.toByteArray();image.recycle()
-        val id=library.create(ProjectIO.create(original,900,600))
+        val bytes=if(large) ins.context.assets.open("formats/large-201mp.jpg").use {it.readBytes()} else original
+        val info=ImagePipeline.inspect(bytes)
+        val id=library.create(ProjectIO.create(bytes,info.width,info.height))
         val scenario=ActivityScenario.launch(MainActivity::class.java)
         lateinit var model: EditorViewModel
         scenario.onActivity {model=ViewModelProvider(it)[EditorViewModel::class.java]}
         val appearance=model.ui.value.appearance;val canvas=model.ui.value.canvasBackground
+        val settings=model.ui.value.exportSettings
         try {
             await {!model.ui.value.busy && !model.ui.value.rendering && desc("编辑预览").exists()}
             block(model,library,id,scenario)
-            assertArrayEquals(original,library.read(id).original)
+            assertArrayEquals(bytes,library.read(id).original)
         } catch(error: Throwable) {evidence("failure");runCatching {device.dumpWindowHierarchy(System.out)};throw error}
         finally {
-            scenario.onActivity {model.setAppearance(appearance);model.setCanvasBackground(canvas)}
+            scenario.onActivity {model.setAppearance(appearance);model.setCanvasBackground(canvas);model.setExportSettings(settings)}
             scenario.close();library.delete(id);File(context.filesDir,"thumbnails/$id.jpg").delete()
             if(previous!=null) library.markOpened(previous)
         }
+    }
+    @Test fun exportPreflightOffersSmallerSizeAndDetailWithoutApplyingDraft() = withEditor(large=true) {model,library,id,scenario ->
+        val initial=library.read(id).manifest
+        scenario.onActivity {model.setExportSettings(ExportSettings())}
+        tap("明暗");exact("曝光","0.35")
+        await {!model.ui.value.rendering}
+        val draft=model.ui.value.draft
+        tap("导出")
+        await {device.hasObject(By.textContains("当前内存预计不足"))}
+        assertFalse(node("应用并导出")?.isEnabled ?: true)
+        assertEquals(initial,library.read(id).manifest)
+        val size="12288 × 16384 · 原尺寸"
+        tap(size);tap("长边 1280")
+        await {!device.hasObject(By.textContains("当前内存预计不足")) && node("应用并导出")?.isEnabled==true}
+        assertEquals(draft,model.ui.value.draft)
+        tap("查看原尺寸细节")
+        await {model.ui.value.detail?.bitmap!=null && model.ui.value.detail?.loading==false}
+        assertEquals(draft,model.ui.value.draft)
+        assertEquals(initial,library.read(id).manifest)
+        scenario.onActivity {model.closeDetail()}
+        tap("导出");tap("可编辑工程")
+        assertTrue(node("应用并导出")?.isEnabled==true)
+        tap("取消")
+        assertEquals(initial,library.read(id).manifest)
+        assertEquals(draft,model.ui.value.draft)
     }
     @Test fun exactInputThemeAndDraftHistoryPreserveSavedProject() = withEditor {model,library,id,scenario ->
         val initial=library.read(id).manifest

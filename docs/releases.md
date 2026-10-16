@@ -4,7 +4,7 @@ The current 0.6.0 development-cycle APK is a development artifact, not a stable 
 
 ## Version and artifacts
 
-- `version.properties` owns `productVersion` and `buildNumber`. The present milestone remains **0.6.0** across feature branches; a feature merge alone does not advance the minor version. Current test artifact: **0.6.0-dev.15**, Android version code **15**.
+- `version.properties` owns `productVersion` and `buildNumber`. The present milestone remains **0.6.0** across feature branches; a feature merge alone does not advance the minor version. Read the exact trial version/code from that file and the APK's embedded build identity.
 - Increment `buildNumber` before distributing a new test build, not for every commit, retry or CI job. Development fixes within an undistributed build can share the number; identify individual CI artifacts by commit and SHA-256. Never reuse a published build number for different test-delivery content. Historical 0.1–0.6 names are retained; no history or tags are rewritten.
 - Advance the product version only when defining a new product milestone and its acceptance scope. Alpha/beta/stable naming describes readiness and needs an explicit release decision; automated builds do not create a release. Project schema (currently v6) evolves independently when persistent semantics change.
 - Every APK embeds `assets/build-info.json` with version name/code and full source commit, and displays these under About. Local changes append `-dirty`; source archives without Git use `unknown` unless the builder supplies `-PsourceRevision=<40-character-commit>`. Distribute a reviewed, clean commit; do not label a dirty or unknown build as an exact source release.
@@ -22,3 +22,38 @@ A release build can be prepared with `./gradlew :app:assembleRelease`; this repo
 Before publishing an update, install the previous signed alpha on a dedicated device/emulator, import and edit a fixture, then install the new APK **without uninstalling**. Verify the signing certificate, version code, retained project list, original bytes, geometry, region data and exported pixels. Separately reopen exported v1/v2/v3/v4/v5/v6 fixtures. If migration fails, stop distribution and retain the last working release; reinstalling and losing app data is not a passing upgrade test.
 
 Physical-device testing and user acceptance remain release gates for device/performance claims. Drafting this process does not mark signing, upgrade testing or release publication complete.
+
+## Continuous development trials
+
+Use one maintainer-controlled development signing identity for a continuing
+trial series; back up its keystore outside the repository with restricted file
+permissions. Do not distribute keys with APKs. A local debug key can preserve an
+existing development installation, but it is not a production signing policy.
+Do not replace it silently with a fresh CI runner's key.
+
+Before delivering an update, run:
+
+```sh
+python3 scripts/apk-provenance.py path/to/candidate.apk
+python3 scripts/verify-apk-update.py path/to/previous.apk path/to/candidate.apk \
+  --output path/to/update-check.json
+```
+
+This verifies both APK signatures, matching package/certificates, increasing
+version code and the candidate's clean source identity against its manifest.
+It does not perform installation. On a dedicated installation, retain a backup
+and hashes of library/index files, install with `adb install -r`, verify unchanged
+projects, force-stop/relaunch, and independently inspect an exported photo and
+portable project. Never count uninstall/reinstall as a successful upgrade.
+
+Retain the new APK and sidecars with its exact source, dependency notices,
+certificate evidence, known failures, and completed/not-run test records at a
+durable maintainer-controlled location. Seven-day CI artifacts are insufficient
+as the only trial archive. A persistent public GitHub prerelease requires a
+separate release decision; preparing a trial does not publish it. Production
+signing remains pending until the maintainer chooses and backs up that identity.
+
+If certificates differ, keep the old installation long enough to export every
+important `.nijiproj`; verify those exports can be reopened on a separate test
+installation before uninstalling anything. Original external photos alone do
+not preserve edit parameters or regions. See [reliability gates](reliability.md).
