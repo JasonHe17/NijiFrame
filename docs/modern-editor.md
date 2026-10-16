@@ -1,6 +1,6 @@
 # Modern editor interaction contract
 
-The Android editor uses a neutral, photo-centered interface with light, dark and system-following appearances. This is part of the `dev/editor-experience` milestone. It reuses the existing image pipeline, local region and editable project format; it does not introduce layers, cloud processing, RAW/HDR editing or a Windows client.
+The Android editor uses a neutral, photo-centered interface with light, dark and system-following appearances. It reuses the existing image pipeline, local region and editable project format; it does not introduce layers, cloud processing, RAW/HDR editing or a Windows client. Current workflows are described in the [user guide](user-guide.md), and run-specific results and unresolved failures in [validation](validation.md).
 
 ## Appearance and layout
 
@@ -44,11 +44,13 @@ The output sheet shows photo/project targets. Photo output exposes format, quali
 
 ## Design sources and boundaries
 
+The initial basic-editing scope was reviewed on 2026-10-15 against official descriptions of [Snapseed tools](https://support.google.com/snapseed/answer/6183571?hl=en), [Lightroom mobile editing](https://helpx.adobe.com/be_en/lightroom-cc/using/edit-photos-mobile-android.html), [Lightroom colors](https://helpx.adobe.com/au/lightroom/mobile/adjust-light-and-color/adjust-colors.html), and [mobile export](https://www.adobe.com/learn/lightroom-cc/web/lightroom-mobile-share). Their common workflows informed the baseline; this was not hands-on testing of every competitor, and no competitor source, icons or layouts were copied.
+
 The design combines labeled parameter selection, reversible tool sessions, precise numeric entry and restrained visual hierarchy. Sources used for the design review include [Apple Photos editing](https://support.apple.com/guide/iphone/edit-photos-and-videos-iphb08064d57/ios), [Samsung Gallery editing](https://www.samsung.com/us/support/answer/ANS10003229/), [Lightroom Android color adjustment](https://helpx.adobe.com/lightroom/mobile/adjust-light-and-color/adjust-colors.html), [VSCO exposure](https://support.vsco.co/en/articles/12698571-using-the-exposure-tool), [Snapseed gesture-based adjustment](https://support.google.com/snapseed/answer/6158224?hl=en), and [Darkroom's interface overview](https://darkroom.co/help/guide/interface-overview). Screenshots and documentation do not establish those products' exact touch gains or hidden gestures; the ruler direction and gains above are NijiFrame choices to evaluate.
 
 Method references include [Shneiderman's direct-manipulation work](https://www.cs.umd.edu/~ben/publications.html), [numeric exploration versus exact controls](https://www.nngroup.com/articles/sliders-knobs/), [visual hierarchy principles](https://www.nngroup.com/articles/principles-visual-design/), [alternatives to dragging](https://www.w3.org/WAI/WCAG22/Understanding/dragging-movements.html), and [Android accessibility defaults](https://developer.android.com/develop/ui/compose/accessibility/api-defaults). No competitor assets, fonts or screenshots are bundled.
 
-The existing [portrait patent investigation](portrait-region-patents.md) and [milestone patent boundaries](editor-experience-milestone.md#笔刷交互复查) remain applicable. This change uses an explicit shared mask, ordinary numeric controls and independent view preferences; it adds no edge-detecting effect brush, face manipulation algorithm, snapping or haptic technique. GUI design drawings and interaction claim combinations still require review. Common use and independent code do not establish patent clearance.
+The existing [portrait patent investigation](portrait-region-patents.md) and [brush interaction review](portrait-region-patents.md#brush-interaction-review-2026-10-15) remain applicable. This change uses an explicit shared mask, ordinary numeric controls and independent view preferences; it adds no edge-detecting effect brush, face manipulation algorithm, snapping or haptic technique. GUI design drawings and interaction claim combinations still require review. Common use and independent code do not establish patent clearance.
 
 ## Verification and remaining evaluation
 

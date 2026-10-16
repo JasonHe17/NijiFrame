@@ -1,4 +1,4 @@
-# Basic editor verification
+# Editor verification
 
 ## Repeatable checks
 
@@ -62,7 +62,7 @@ Phone compatibility jobs use a 6 GiB userdata partition and a 512 MiB applicatio
 
 The bounded-heap JVM test validates the project resource-loading path only, without Android codecs or bitmaps. It does not establish an Android heap requirement. Reports are under `editor-core/build/test-results/boundedHeapTest/` and `editor-core/build/reports/tests/boundedHeapTest/`; ordinary tests retain their existing report directories.
 
-UI brush checks wait for both the actual completed detail frame and the accessibility canvas before injecting a touch. Accessibility node existence alone can describe the preceding frame while decoding/rendering is still in progress. Failure evidence retains a bounded chronology of frame readiness, brush mode and synthetic touch positions; real touch, coordinate, undo and persisted-output assertions remain enabled. See [Android test synchronization guidance](https://developer.android.com/develop/ui/compose/testing/synchronization).
+UI brush checks wait for both the actual completed detail frame and the accessibility canvas before injecting a touch. Accessibility node existence alone can describe the preceding frame while decoding/rendering is still in progress. After a mode change, checks also wait for the actual brush mode and the control's checked state before drawing; a click can return before its new mode reaches Compose. Failure evidence retains a bounded chronology of frame readiness, brush mode and synthetic touch positions; real touch, coordinate, undo and persisted-output assertions remain enabled. See [Android test synchronization guidance](https://developer.android.com/develop/ui/compose/testing/synchronization).
 
 CI unlocks dedicated emulators through `wm dismiss-keyguard`, without delivering a Menu key to the newly started launcher. A launcher ANR dialog can otherwise obscure unrelated UI checks. SDK installation has at most three attempts for download/archive errors; application tests are not automatically retried. Preserve bootstrap logs when distinguishing infrastructure and product failures.
 
