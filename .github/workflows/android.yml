@@ -27,6 +27,8 @@ jobs:
       - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3; validates wrapper
       - name: Install declared Android components
         run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'ndk;28.2.13676358' 'cmake;3.22.1'
+      - name: Emulator preparation fault checks
+        run: python3 -m unittest discover -s scripts -p 'test_*.py'
       - name: Unit tests, APK and lint
         run: ./gradlew :editor-core:test :app:testDebugUnitTest :app:assembleDebug :app:lintDebug
       - name: Check native library alignment for 16 KB pages
@@ -111,49 +113,29 @@ jobs:
           echo 'disk.dataPartition.size=6G' >> "$ANDROID_AVD_HOME/ci.avd/config.ini"
           "$ANDROID_HOME/emulator/emulator" -avd ci -port 5554 -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader > emulator.log 2>&1 &
           niji_emulator_pid=$!
-          trap 'adb emu kill || true; kill "$niji_emulator_pid" 2>/dev/null || true' EXIT
+          finish() {
+            niji_exit_status=$?
+            trap - EXIT
+            bash scripts/collect-emulator-evidence.sh emulator-5554 app/build/emulator-evidence || true
+            adb -s emulator-5554 emu kill || true
+            kill "$niji_emulator_pid" 2>/dev/null || true
+            exit "$niji_exit_status"
+          }
+          trap finish EXIT
+          echo boot > emulator-phase.txt
           for attempt in {1..90}; do
             if ! kill -0 "$niji_emulator_pid" 2>/dev/null; then cat emulator.log; exit 1; fi
-            if [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = 1 ]; then break; fi
+            if [ "$(timeout 10s adb -s emulator-5554 shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = 1 ]; then break; fi
             sleep 2
           done
-          test "$(adb shell getprop sys.boot_completed | tr -d '\r')" = 1
-          adb shell getconf PAGE_SIZE
-          if [ '${{ matrix.image }}' = google_apis_ps16k ]; then
-            test "$(adb shell getconf PAGE_SIZE | tr -d '\r')" = 16384
-          fi
-          # Keep positive full-resolution tests on the same app heap budget across
-          # system images. Separate tests inject low budgets and assert safe refusal.
-          adb root
-          adb wait-for-device
-          # Stop only the primary zygote: some images have no zygote_secondary.
-          # Wait for the old runtime to exit before starting a new system server.
-          adb shell stop zygote
-          for attempt in {1..60}; do
-            if [ "$(adb shell getprop init.svc.zygote | tr -d '\r')" = stopped ]; then break; fi
-            sleep 1
-          done
-          test "$(adb shell getprop init.svc.zygote | tr -d '\r')" = stopped
-          adb shell setprop dalvik.vm.heapsize 512m
-          adb shell setprop dalvik.vm.heapgrowthlimit 512m
-          adb shell setprop sys.boot_completed 0
-          adb shell start zygote
-          for attempt in {1..90}; do
-            if [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = 1 ]; then break; fi
-            sleep 2
-          done
-          test "$(adb shell getprop sys.boot_completed | tr -d '\r')" = 1
-          test "$(adb shell getprop dalvik.vm.heapgrowthlimit | tr -d '\r')" = 512m
-          # Avoid sending a key to a still-starting launcher: an input timeout can
-          # leave its ANR dialog above every subsequent app UI test.
-          adb shell wm dismiss-keyguard
-          adb shell settings put global window_animation_scale 0
-          adb shell settings put global transition_animation_scale 0
-          adb shell settings put global animator_duration_scale 0
-          adb shell df -k /data
+          test "$(timeout 10s adb -s emulator-5554 shell getprop sys.boot_completed | tr -d '\r')" = 1
+          echo framework-preparation > emulator-phase.txt
+          niji_page_size=4096
+          if [ '${{ matrix.image }}' = google_apis_ps16k ]; then niji_page_size=16384; fi
+          python3 scripts/prepare-test-emulator.py --serial emulator-5554 --page-size "$niji_page_size"
+          echo application-tests > emulator-phase.txt
           if ./gradlew --no-daemon --max-workers=2 :app:connectedDebugAndroidTest; then niji_test_status=0; else niji_test_status=$?; fi
-          adb pull /sdcard/Download/nijiframe-test-evidence app/build/ui-evidence || true
-          adb logcat -d > app/build/emulator-logcat.txt || true
+          echo "application-tests-exit-$niji_test_status" > emulator-phase.txt
           exit "$niji_test_status"
       - name: Retain Android test evidence
         if: always()
@@ -163,6 +145,8 @@ jobs:
           retention-days: 7
           path: |
             emulator.log
+            emulator-phase.txt
+            app/build/emulator-evidence/
             app/build/reports/androidTests/
             app/build/outputs/androidTest-results/
             app/build/ui-evidence/
