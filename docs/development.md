@@ -42,7 +42,7 @@ cmake --build build/native
 ctest --test-dir build/native --output-on-failure
 ```
 
-[GitHub Actions](https://github.com/JasonHe17/NijiFrame/actions/workflows/android.yml) 执行构建、Lint、JVM/native 检查和 API 29／31／34／36／37.0 模拟器测试及 API 35 的 16 KiB 页测试，保留报告与开发 APK。应查看具体提交的运行结果；历史失败不会被描述为通过。物理手机与 Windows 尚未验证。
+[GitHub Actions](https://github.com/JasonHe17/NijiFrame/actions/workflows/android.yml) 执行构建、Lint、JVM/native 检查和 API 29／31／34／35／36／37.0 模拟器测试及 API 35 的 16 KiB 页测试，保留报告与开发 APK。应查看具体提交的运行结果；历史失败不会被描述为通过。物理手机与 Windows 尚未验证。
 
 
 ## 模块导航
@@ -67,3 +67,6 @@ python3 scripts/apk-provenance.py app/build/outputs/apk/debug/app-debug.apk
 ```
 
 The supplied model must match the pinned checksum. A source archive without `.git` can specify `-PsourceRevision=<full-commit>`; otherwise About reports `unknown`. Normal Git builds determine their revision automatically and mark a dirty checkout. See [version policy](releases.md) before changing `version.properties`. Model licensing is documented in [model provenance](../models/README.md).
+
+
+The API35 x86_64 16KiB test uses a corrected, checksummed official GKI kernel; ordinary API35 4KiB is tested separately. See [runtime diagnosis and kernel identity](android-16k-runtime.md). This emulator configuration does not establish physical-phone compatibility.

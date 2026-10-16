@@ -78,7 +78,7 @@
 
 | 项目 | 当前范围 |
 | --- | --- |
-| 平台 | Android；配置最低 Android 8.0／API 26，自动化模拟器测试配置覆盖 API 29、31、34、36、37.0 及 API 35 的 16 KiB 页环境 |
+| 平台 | Android；配置最低 Android 8.0／API 26，自动化模拟器测试配置覆盖 API 29、31、34、35、36、37.0 及 API 35 的 16 KiB 页环境 |
 | 输入 | JPEG（含常见广色域与 Ultra HDR SDR 底图）、8/16 位不透明 PNG、静态 WebP、系统可解码的 HEIC/HEIF 与 AVIF；单张不超过 2.1 亿像素、64 MiB，单边不超过 32768 像素 |
 | 输出 | JPEG／PNG；原尺寸或缩小长边，不放大小图；照片导出不复制原图元数据 |
 | 可编辑工程 | 实验性 `.nijiproj` v6，兼容读取 v1–v5；工程包含原图及原有元数据 |
@@ -110,3 +110,6 @@
 ## 许可
 
 NijiFrame 自有代码采用 [GPL-3.0-only](LICENSE)。第三方组件保留各自许可，见[第三方声明](THIRD_PARTY_NOTICES.md)。项目不授予无权许可的第三方专利权。
+
+
+The API35 x86_64 16KiB test uses a corrected, checksummed official GKI kernel; ordinary API35 4KiB is tested separately. See [runtime diagnosis and kernel identity](docs/android-16k-runtime.md). This emulator configuration does not establish physical-phone compatibility.

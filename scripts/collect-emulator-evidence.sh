@@ -12,6 +12,8 @@ capture() {
 }
 capture logcat logcat -b all -d
 capture properties shell getprop
+capture kernel shell uname -a
+capture boot-command-line shell cat /proc/cmdline
 capture activity shell dumpsys activity
 capture window shell dumpsys window
 capture dropbox shell dumpsys dropbox --print

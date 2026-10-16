@@ -29,7 +29,7 @@
 - **200 MP 级静态图输入：**资源像素上限由 100 MP 提高至 210 MP，包含 16384×12288（201,326,592 像素）这样的测试尺寸。它是合成边界样本，不声称来自上述某款手机。保留 64 MiB 编码字节上限、32768 单边上限、采样预览和独立导出内存检查。
 - **HEIF 局部解码：**修复 Android 17 上奇数坐标的细节窗口偏移一像素的问题。直接系统解码对照确认奇数起点向偶数对齐，现与 WebP 共用先对齐再裁取的处理；旧系统的局部解码失败仍可回退整帧。
 - **原件与细节：**约 201 MP 合成 JPEG 通过实际导入、EXIF 旋转、原尺寸纹理、编辑、工程重开、缩小导出及内存拒绝路径验证；不在 Android 测试中构建整张 201 MP 位图。既有 12/48/100 MP 回归保留。
-- **系统边界：**CI 配置从 API 29/36 扩展至 29/31/34/36，并加入 API 37.0 和 API 35 的 16 KiB 页镜像；分别覆盖旧 HEIF 行为、Android 12 AVIF、Android 14 gainmap API 和 Android 16 路径。必须以对应提交的 CI 结果判断执行是否成功。
+- **系统边界：**CI 配置从 API 29/36 扩展至 29/31/34/35/36，并加入 API 37.0 和 API 35 的 16 KiB 页镜像；分别覆盖旧 HEIF 行为、Android 12 AVIF、Android 14 gainmap API 和 Android 16 路径。必须以对应提交的 CI 结果判断执行是否成功。
 - **反馈入口：**提供兼容性问题模板，要求应用／系统版本、操作和错误，图片信息可选。不要求公开照片、EXIF GPS、设备序列号或完整系统日志。
 - **原生库打包：**CI 检查 APK 内全部原生库的 16 KiB ELF LOAD 对齐、RELRO 保护布局及 ZIP 对齐，防止后续依赖更新带来加载问题。Android 15 起有 16 KiB 页设备；静态检查通过仍不等于已经在该类设备运行，依据见 [Android 官方说明](https://developer.android.com/guide/practices/page-sizes)。
 
@@ -42,7 +42,7 @@
 | 格式／颜色 | sRGB、P3、Adobe RGB JPEG；SDR 底图 Ultra HDR；PNG 8/16；静态 WebP；SDR HEIF/AVIF | 预览、细节、导出颜色一致；原字节一致；不支持时有错误。10 位 HEIF/AVIF、厂商增益图变体仍待样本 |
 | 分辨率／字节数 | 12、48、100、201 MP；210 MP 边界；>32 MiB 编码输入 | 保留原坐标和原件；小尺寸输出符合选择；不静默降低原尺寸输出；>64 MiB 仍拒绝 |
 | 内存 | 注入受限预算，原尺寸导出拒绝且已有目标不被截断 | 正向 CI 的应用堆统一为 512 MiB；默认 192 MiB 的 API 31/34 完整测试曾触发保护，单独 12 MP 测试可通过，不能声称修复低内存长会话问题。预算测试不是低内存手机实测；峰值内存、解码器临时缓冲、发热待真机 |
-| 操作系统 | CI API 29/31/34/36、37.0；另有 API 35 的 16 KiB 页镜像 | API 26 配置最低版本仍未完整验证。中间版本不能仅凭端点通过写成已测试 |
+| 操作系统 | CI API 29/31/34/35/36、37.0；另有 API 35 的 16 KiB 页镜像 | API 26 配置最低版本仍未完整验证。中间版本不能仅凭端点通过写成已测试 |
 | 芯片／ABI | x86_64 模拟器执行，arm64 编译；原生库 16 KiB 静态对齐检查 | 仅打包 arm64-v8a/x86_64，纯 32 位 Android 设备不能安装。骁龙、天玑及不同 GPU 尚无代表性真机执行证据，16 KiB 页镜像需单独通过运行测试。以后启用 GPU 后端须重新验证驱动兼容 |
 | 文件来源 | 系统选择器、URI 读写、权限失败与重开回归 | 厂商图库／云图库／聊天软件保存／相机导出分别采样；传输可能转码或移除元数据 |
 | 屏幕／生命周期 | 竖横屏、短屏、活动重建和草稿回归 | 折叠屏、多窗口、字体放大、后台进程回收与存储不足列入手工候选；不宣称全面完成 |
@@ -65,3 +65,6 @@
 本轮沿用平台解码、采样预览和既有区域渲染，仅扩大资源边界与测试覆盖；没有新增增益图重建、显示器自适应色调映射或厂商算法复刻。已有权利要求比对与未决事项见[照片输入专利说明](photo-input.md#patent-and-dependency-notes)。更大图片的支持不构成新的专利清障结论；后续自行捆绑 HEVC/RAW 编解码器或采用 HDR 算法时需重新调查。
 
 16 KiB 静态检查验证 LOAD 对齐与 RELRO 页取整后的保护范围，不以 RELRO 结束地址取模作为唯一标准：段间空隙可能使未对齐的结束地址仍不覆盖可写数据。依据为 [Bionic 的保护实现](https://android.googlesource.com/platform/bionic/+/android16-qpr2-release/linker/linker_phdr.cpp)；另以实际 16 KiB 页镜像运行测试，不能将该静态检查当成任意设备认证。
+
+
+The API35 x86_64 16KiB test uses a corrected, checksummed official GKI kernel; ordinary API35 4KiB is tested separately. See [runtime diagnosis and kernel identity](android-16k-runtime.md). This emulator configuration does not establish physical-phone compatibility.

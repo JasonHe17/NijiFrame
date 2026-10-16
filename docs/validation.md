@@ -29,7 +29,7 @@ Use a dedicated test installation: the Gradle runner installs/uninstalls APKs, s
 
 The UI test uses synthetic images and the actual system picker; it does not inject fake activity results or disable rendering. Accessibility locators are refreshed at interaction boundaries to avoid using stale nodes after Compose/DocumentUI updates. It uses UIAutomator 2.4.0. API 34+ accessibility-cache clearing is confined to test code. Runtime behavior does not depend on testing switches.
 
-GitHub Actions runs Linux build/native checks and API 29/31/34/36/37.0 Android jobs plus an API 35 16 KiB-page job. Workflow reports, APKs, and available UI evidence are retained as artifacts for seven days. Always inspect checks on the commit being reviewed; a configuration file alone is not proof that remote CI passed.
+GitHub Actions runs Linux build/native checks and API 29/31/34/35/36/37.0 Android jobs plus an API 35 16 KiB-page job. Workflow reports, APKs, and available UI evidence are retained as artifacts for seven days. Always inspect checks on the commit being reviewed; a configuration file alone is not proof that remote CI passed.
 
 ## Manual acceptance and process recovery
 
@@ -46,7 +46,7 @@ Use synthetic or appropriately licensed images. Never commit private photographs
 
 ## Coverage and limitations
 
-Local checks use Linux x86_64 and Android 16/API 36 x86_64. Arm64 APK content is compiled; it has not been exercised on a phone. The declared API 26 minimum is not a tested device matrix. GitHub API 29/31/34/36 jobs provide separate hosted evidence when completed successfully. There are no Windows execution or physical-device performance claims.
+Local checks use Linux x86_64 and Android 16/API 36 x86_64. Arm64 APK content is compiled; it has not been exercised on a phone. The declared API 26 minimum is not a tested device matrix. GitHub API 29/31/34/35/36/37.0 jobs provide separate hosted evidence when completed successfully. There are no Windows execution or physical-device performance claims.
 
 The 210 MP / 64 MiB / 32,768-pixel-edge limits are current implementation bounds, not a promise of responsive operation on every phone. Native processing is cancellable between strips; platform decoder/provider I/O has platform-dependent cancellation latency. Saving uses synchronized file contents and atomic replacement, not a guarantee against all storage hardware failures. External providers can leave partial destinations on failure.
 
@@ -80,3 +80,6 @@ The accepted candidate `c5b7614` passed [run 38874840309](https://github.com/Jas
 - API 37 completed 53 tests with 11 UI failures. Logs record a Pixel Launcher ANR, and failure screenshots show its system dialog covering the editor. Emulator startup and UI readiness need investigation; this is not a completed successful UI run.
 
 Retain both results. A prior successful run, an unchanged source tree or synchronized branches do not establish that intermittent runtime failures are fixed. No checks were removed and no runtime workaround was introduced as part of branch maintenance.
+
+
+The API35 x86_64 16KiB test uses a corrected, checksummed official GKI kernel; ordinary API35 4KiB is tested separately. See [runtime diagnosis and kernel identity](android-16k-runtime.md). This emulator configuration does not establish physical-phone compatibility.

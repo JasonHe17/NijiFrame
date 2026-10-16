@@ -67,6 +67,8 @@ jobs:
         api: [29, 31, 34, 36]
         image: [default]
         include:
+          - api: 35
+            image: google_apis
           - api: '37.0'
             image: google_apis
           - api: 35
@@ -88,10 +90,14 @@ jobs:
       - name: Install SDK and emulator
         shell: bash
         run: |
+          niji_packages=('platforms;android-36' 'build-tools;36.0.0' 'ndk;28.2.13676358' 'cmake;3.22.1' 'emulator' 'system-images;android-${{ matrix.api }};${{ matrix.image }};x86_64')
+          if [ '${{ matrix.image }}' = google_apis_ps16k ]; then
+            niji_packages+=('system-images;android-36;default;x86_64')
+          fi
           # SDK downloads can be interrupted before ZIP validation. Bound retries to
           # infrastructure setup; app tests themselves are never retried here.
           for attempt in 1 2 3; do
-            if sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'ndk;28.2.13676358' 'cmake;3.22.1' 'emulator' 'system-images;android-${{ matrix.api }};${{ matrix.image }};x86_64'; then exit 0; fi
+            if sdkmanager "${niji_packages[@]}"; then exit 0; fi
             if [ "$attempt" = 3 ]; then exit 1; fi
             sleep 5
           done
@@ -111,7 +117,19 @@ jobs:
           # Google APIs images need more userdata space than the AVD CLI default.
           sed -i '/^disk.dataPartition.size=/d' "$ANDROID_AVD_HOME/ci.avd/config.ini"
           echo 'disk.dataPartition.size=6G' >> "$ANDROID_AVD_HOME/ci.avd/config.ini"
-          "$ANDROID_HOME/emulator/emulator" -avd ci -port 5554 -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader > emulator.log 2>&1 &
+          niji_kernel_args=()
+          if [ '${{ matrix.image }}' = google_apis_ps16k ]; then
+            # API35 rev5 ships a pre-fix 6.6.50 kernel. Its emulated 16KiB/UFFD
+            # combination can corrupt ART-managed state, including system apps.
+            # Use the official Android15 GKI from API36 default rev2; see
+            # docs/android-16k-runtime.md for provenance and the upstream fix.
+            niji_kernel="$ANDROID_HOME/system-images/android-36/default/x86_64/kernel-ranchu"
+            echo "3f366c20522314f8ccbef89210eabec3491d18997799882e1f0d4d8134e8b937  $niji_kernel" | sha256sum --check
+            file "$niji_kernel" > emulator-kernel.txt
+            sha256sum "$niji_kernel" >> emulator-kernel.txt
+            niji_kernel_args=(-kernel "$niji_kernel")
+          fi
+          "$ANDROID_HOME/emulator/emulator" -avd ci -port 5554 "${niji_kernel_args[@]}" -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader > emulator.log 2>&1 &
           niji_emulator_pid=$!
           finish() {
             niji_exit_status=$?
@@ -131,8 +149,12 @@ jobs:
           test "$(timeout 10s adb -s emulator-5554 shell getprop sys.boot_completed | tr -d '\r')" = 1
           echo framework-preparation > emulator-phase.txt
           niji_page_size=4096
-          if [ '${{ matrix.image }}' = google_apis_ps16k ]; then niji_page_size=16384; fi
-          python3 scripts/prepare-test-emulator.py --serial emulator-5554 --page-size "$niji_page_size"
+          niji_runtime_args=()
+          if [ '${{ matrix.image }}' = google_apis_ps16k ]; then
+            niji_page_size=16384
+            niji_runtime_args=(--expect-gc CC)
+          fi
+          python3 scripts/prepare-test-emulator.py --serial emulator-5554 --page-size "$niji_page_size" "${niji_runtime_args[@]}"
           echo application-tests > emulator-phase.txt
           if ./gradlew --no-daemon --max-workers=2 :app:connectedDebugAndroidTest; then niji_test_status=0; else niji_test_status=$?; fi
           echo "application-tests-exit-$niji_test_status" > emulator-phase.txt
@@ -146,6 +168,7 @@ jobs:
           path: |
             emulator.log
             emulator-phase.txt
+            emulator-kernel.txt
             app/build/emulator-evidence/
             app/build/reports/androidTests/
             app/build/outputs/androidTest-results/

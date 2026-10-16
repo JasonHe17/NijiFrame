@@ -39,6 +39,14 @@ class RootReconnectTest(unittest.TestCase):
         with patch.object(module.subprocess, "run", side_effect=module.subprocess.TimeoutExpired("adb", 15)):
             self.assertEqual(module.Adb("emulator-5554").run("root")[0], 124)
 
+    def test_legacy_simulator_cannot_silently_use_the_wrong_collector(self):
+        adb = module.Adb("emulator-5554")
+        with patch.object(adb, "run", return_value=(0, "zygote64: Using CollectorTypeCMC GC.")):
+            with self.assertRaisesRegex(RuntimeError, "Expected zygote collector CC"):
+                adb.require_collector("CC")
+        with patch.object(adb, "run", return_value=(0, "zygote64: Using CollectorTypeCC GC.")):
+            adb.require_collector("CC")
+
 
 if __name__ == "__main__":
     unittest.main()

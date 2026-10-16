@@ -2,7 +2,9 @@
 
 This is the P0 reliability work for the 0.6.0 development cycle. New editing
 features can proceed independently; an unexplained native application crash
-continues to block a stable release. A green run does not close an intermittent
+on a supported runtime continues to block a stable release. The legacy API35
+x86_64 16KiB image has a known kernel/GC incompatibility and now uses a corrected
+official kernel; see [the diagnosis and evidence boundary](android-16k-runtime.md). A green run does not close an intermittent
 failure without evidence of its cause and correction.
 
 ## Separate failure records
@@ -10,7 +12,7 @@ failure without evidence of its cause and correction.
 | ID | Observed evidence | Status and next discriminating check |
 | --- | --- | --- |
 | CI-ADB-01 | Runs [38880754331](https://github.com/JasonHe17/NijiFrame/actions/runs/38880754331) (API36) and [38880754519](https://github.com/JasonHe17/NijiFrame/actions/runs/38880754519) (API29/36) exit at `adb root` with `unable to connect for root: closed`, before application tests | Preparation now tolerates a closed root request only when a bounded reconnect verifies uid 0. Three requests maximum, each command has a timeout. Fault checks cover closed/offline transport, a misleading success response, unsupported root and a hung command. This addresses premature workflow exit; it does not establish the underlying transport cause. |
-| RUNTIME-16K-01 | Run [38878652710](https://github.com/JasonHe17/NijiFrame/actions/runs/38878652710), API35/16KiB x86_64, application main-thread SIGSEGV at address `0x110`; first frame is JIT-compiled `LayoutNodeDrawScope.draw`, after 37 completed tests | Open, stable-release blocker. A JIT frame identifies the execution site, not proof of an ART or Compose defect. Preserve the complete tombstone, runtime fingerprint, APK and full preceding suite; do not disable JIT, remove 16KiB or substitute a short passing test for the failure. |
+| RUNTIME-16K-01 | Run [38878652710](https://github.com/JasonHe17/NijiFrame/actions/runs/38878652710), API35/16KiB x86_64, application main-thread SIGSEGV at address `0x110`; first frame is JIT-compiled `LayoutNodeDrawScope.draw`, after 37 completed tests | Legacy kernel/GC configuration corrected in CI using a verified official GKI kernel, while retaining API35 userspace and 16KiB tests; [diagnosis](android-16k-runtime.md). The particular historical JIT stacks are consistent with runtime corruption but not deterministically reproduced. Preserve the original failures; any crash on the corrected supported runtime remains a blocker. JIT is unchanged. |
 | SYSTEM-HOME-01 | Same run, API37: Pixel Launcher focus-event ANR, visible system dialog, 11 UI failures out of 53 | Open system interference. Preparation now waits for package/activity services and a successful HOME launch before application tests. This is readiness evidence, not a demonstrated fix for later ANRs. Keep system dialogs and failures visible. |
 
 Earlier API35 evidence also includes a MediaProvider crash and a different
@@ -64,3 +66,6 @@ Use the [trial tasks](manual-check.md#two-short-phone-tasks) and
 [signing/update procedure](releases.md). Physical-phone tasks, complete TalkBack
 acceptance and production signing are separate gates. An unavailable phone test
 must remain explicitly pending; emulator results cannot fill it in.
+
+
+The same-commit develop run [38913733755](https://github.com/JasonHe17/NijiFrame/actions/runs/38913733755) later failed one of 54 UI checks in the legacy API35/16KiB environment. Its evidence includes separate GMS native and SystemUI ReferenceQueueDaemon crashes. The other five Android jobs and build passed; the earlier green run remains historical evidence, not a resolution of this subsequent failure. See the kernel diagnosis above.

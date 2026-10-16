@@ -49,8 +49,13 @@ class Adb:
                 pass
         raise RuntimeError("adbd did not reconnect as uid 0 after three root requests")
 
+    def require_collector(self, expected):
+        output = self.require("logcat", "-d", "-s", "zygote64:I")
+        if f"Using CollectorType{expected} GC." not in output:
+            raise RuntimeError(f"Expected zygote collector {expected}; check the test kernel: {output}")
 
-def prepare(adb, page_size):
+
+def prepare(adb, page_size, expected_gc=None):
     adb.wait(("shell", "getprop", "sys.boot_completed"), lambda value: value == "1", seconds=180)
     if adb.require("shell", "getconf", "PAGE_SIZE") != str(page_size):
         raise RuntimeError("Unexpected emulator page size")
@@ -66,6 +71,8 @@ def prepare(adb, page_size):
     adb.wait(("shell", "cmd", "activity", "get-current-user"), lambda value: value == "0")
     if adb.require("shell", "getprop", "dalvik.vm.heapgrowthlimit") != "512m":
         raise RuntimeError("Test heap budget was not applied")
+    if expected_gc:
+        adb.require_collector(expected_gc)
     adb.require("shell", "wm", "dismiss-keyguard")
     for name in ("window_animation_scale", "transition_animation_scale", "animator_duration_scale"):
         adb.require("shell", "settings", "put", "global", name, "0")
@@ -81,5 +88,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--serial", required=True)
     parser.add_argument("--page-size", type=int, choices=(4096, 16384), default=4096)
+    parser.add_argument("--expect-gc", choices=("CC", "CMC"))
     args = parser.parse_args()
-    prepare(Adb(args.serial), args.page_size)
+    prepare(Adb(args.serial), args.page_size, args.expect_gc)
