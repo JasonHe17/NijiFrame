@@ -54,6 +54,24 @@ int main() {
     const uint32_t unchanged=local[1];assert(nf_local_exposure(local,mask,3,0.0f)==0);assert(local[1]==unchanged);
     assert(nf_local_exposure(local,nullptr,3,1.0f)==-1);
     assert(nf_local_exposure(local,mask,3,4.0f)==-1);
+    // Local color obeys scope and partial coverage, and preserves old exposure output.
+    uint32_t color[] = {0xff808080u,0xff808080u,0xff808080u};
+    assert(nf_local_color(color,mask,3,0,1,0,1)==0 && color[0]==0xff808080u);
+    assert(((color[2]>>16)&255)>(color[2]&255));
+    assert(((color[1]>>16)&255)<((color[2]>>16)&255));
+    uint32_t tint=0xff808080u;const uint8_t full_mask=255;
+    assert(nf_local_color(&tint,&full_mask,1,0,0,1,1)==0 && ((tint>>8)&255)<(tint&255));
+    uint32_t desaturated=0xffbb8844u;
+    assert(nf_local_color(&desaturated,&full_mask,1,0,.3f,-.2f,0)==0);
+    assert(((desaturated>>16)&255)==(desaturated&255) && ((desaturated>>8)&255)==(desaturated&255));
+    for(float ev: {-3.f,-.3f,0.f,.7f,3.f}) {
+        std::vector<uint32_t> old(256),current(256);std::vector<uint8_t> weights(256);
+        for(int i=0;i<256;++i) {old[i]=0xff000000u|(i<<16)|((255-i)<<8)|i;weights[i]=i;}
+        current=old;
+        assert(nf_local_exposure(old.data(),weights.data(),256,ev)==0);
+        assert(nf_local_color(current.data(),weights.data(),256,ev,0,0,1)==0 && current==old);
+    }
+    assert(nf_local_color(color,mask,3,0,std::numeric_limits<float>::quiet_NaN(),0,1)==-1);
 
     // Softening is out-of-place and leaves unselected/zero-strength pixels bit-identical.
     const int w=23,h=71;
@@ -77,6 +95,18 @@ int main() {
             assert(nf_soften(skin.data()+first*w,strips.data()+y*w,region.data()+y*w,w,last-first,y-first,rows,radius,.6f,.75f)==0);
         }
         assert(strips==softened);
+        auto merged=skin;
+        assert(nf_soften_merge(skin.data(),merged.data(),region.data(),w,h,0,h,radius,.6f,.75f)==0);
+        assert(merged==softened); // First region retains the exact legacy result.
+        std::vector<uint8_t> second_mask(w*h,128);
+        assert(nf_soften_merge(skin.data(),merged.data(),second_mask.data(),w,h,0,h,radius,.4f,.9f)==0);
+        strips=skin;
+        for(int y=0;y<h;y+=32) {
+            const int first=std::max(0,y-radius),last=std::min(h,y+32+radius),rows=std::min(32,h-y);
+            assert(nf_soften_merge(skin.data()+first*w,strips.data()+y*w,region.data()+y*w,w,last-first,y-first,rows,radius,.6f,.75f)==0);
+            assert(nf_soften_merge(skin.data()+first*w,strips.data()+y*w,second_mask.data()+y*w,w,last-first,y-first,rows,radius,.4f,.9f)==0);
+        }
+        assert(strips==merged); // Overlap never expands the neighborhood halo.
     }
     uint32_t singleton=0xff789abcu,singleout=0;const uint8_t selected=255;
     assert(nf_soften(&singleton,&singleout,&selected,1,1,0,1,6,1,0)==0 && singleout==singleton);

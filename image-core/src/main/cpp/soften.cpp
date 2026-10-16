@@ -5,8 +5,8 @@
 #include <cstdint>
 
 // Explicitly selected region; encoded-sRGB bilateral candidate, not semantic skin recognition.
-int nf_soften(const uint32_t* source, uint32_t* destination, const uint8_t* mask,
-              int width, int height, int first_row, int rows, int radius, float strength, float protection) {
+static int soften(const uint32_t* source, uint32_t* destination, const uint8_t* mask,
+              int width, int height, int first_row, int rows, int radius, float strength, float protection, bool merge) {
     if (!source || !destination || !mask || source==destination || width<1 || height<1 || rows<1 ||
         static_cast<int64_t>(width)*height>8000000 || first_row<0 || first_row>height-rows ||
         radius<1 || radius>6 || !std::isfinite(strength) || strength<0 || strength>1 ||
@@ -20,7 +20,7 @@ int nf_soften(const uint32_t* source, uint32_t* destination, const uint8_t* mask
         const int y=first_row+row;
         const size_t out=static_cast<size_t>(row)*width+x;
         const auto center=source[static_cast<size_t>(y)*width+x];
-        if(strength==0 || mask[out]==0) {destination[out]=center;continue;}
+        if(strength==0 || mask[out]==0) {if(!merge) destination[out]=center;continue;}
         const int r=(center>>16)&255,g=(center>>8)&255,b=center&255;
         float sum_r=0,sum_g=0,sum_b=0,total=0;
         int edge=0;
@@ -35,7 +35,16 @@ int nf_soften(const uint32_t* source, uint32_t* destination, const uint8_t* mask
         }
         const float amount=strength*(mask[out]/255.0f)*(1.0f-protection*std::min(1.0f,edge/24.0f));
         const auto mix=[&](int c,float sum) {return static_cast<uint32_t>(std::clamp(std::lround(c+amount*(sum/total-c)),0L,255L));};
-        destination[out]=0xff000000u | (mix(r,sum_r)<<16) | (mix(g,sum_g)<<8) | mix(b,sum_b);
+        const auto previous=merge ? destination[out] : center;
+        destination[out]=0xff000000u | (mix((previous>>16)&255,sum_r)<<16) | (mix((previous>>8)&255,sum_g)<<8) | mix(previous&255,sum_b);
     }
     return 0;
+}
+int nf_soften(const uint32_t* source, uint32_t* destination, const uint8_t* mask,
+              int width, int height, int first_row, int rows, int radius, float strength, float protection) {
+    return soften(source,destination,mask,width,height,first_row,rows,radius,strength,protection,false);
+}
+int nf_soften_merge(const uint32_t* source, uint32_t* destination, const uint8_t* mask,
+              int width, int height, int first_row, int rows, int radius, float strength, float protection) {
+    return soften(source,destination,mask,width,height,first_row,rows,radius,strength,protection,true);
 }

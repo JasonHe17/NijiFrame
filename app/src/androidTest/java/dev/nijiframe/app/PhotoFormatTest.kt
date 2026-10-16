@@ -33,7 +33,7 @@ class PhotoFormatTest {
         val (project,decoded)=repository.importPhoto(Uri.fromFile(input))
         try {
             assertEquals(expectedWidth,project.manifest.width);assertEquals(expectedHeight,project.manifest.height)
-            assertEquals(6,project.manifest.version);assertTrue(project.manifest.honorExifColorSpace);assertArrayEquals(bytes,project.original)
+            assertEquals(7,project.manifest.version);assertTrue(project.manifest.honorExifColorSpace);assertArrayEquals(bytes,project.original)
             assertEquals(ColorSpace.get(ColorSpace.Named.SRGB),decoded.colorSpace)
             assertEquals(Bitmap.Config.ARGB_8888,decoded.config)
             if(Build.VERSION.SDK_INT>=34) assertFalse(decoded.hasGainmap())

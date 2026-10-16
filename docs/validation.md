@@ -8,7 +8,7 @@ application tests; historical intermittent crashes remain open separately.
 
 | Check | Scope |
 | --- | --- |
-| `:editor-core:test` | v1–v6 resource and parameter round-trip, source hashes, unsupported/corrupt ZIP rejection, history branches, failed-write recovery, geometry bounds/crop handles, no-upscale export dimensions, independent projects, rename/duplicate/delete and migration |
+| `:editor-core:test` | v1–v7 resource and parameter round-trip, source hashes, unsupported/corrupt ZIP rejection, history branches, failed-write recovery, geometry bounds/crop handles, no-upscale export dimensions, independent projects, rename/duplicate/delete and migration |
 | `:app:testDebugUnitTest` | Parameter display/engine units, exact-input validation, relative ruler precision and endpoint reversal |
 | `ModernEditorTest` | Exact input, two history scopes, light/dark and independent canvas, recreation, export cancellation, relative ruler, two-finger brush navigation and 320 dp short window at 200% font scale |
 | Native CTest | Neutral identity, known linear-light EV, saturation and warmth, clipping/invalid values, constant-image and impulse sharpening, radial vignette symmetry and strip equivalence, ASan/UBSan |
@@ -19,7 +19,7 @@ application tests; historical intermittent crashes remain open separately.
 | `LocalEditingTest` | Region pixels/overlay through crop, straightening, flips and rotation; portable export after private source deletion; approximate-to-reference settling; local draft history, save/reopen, real brush UI, edge slider drags under gesture navigation and Back outside the control |
 | `DetailRendererTest` / `DetailInspectorTest` | Region versus full rendering with halos, all EXIF orientations, crop/rotation/flip and vignette coordinates, 100 MP original texture without a full bitmap, real screenshot pixel scale, comparison, activity recreation and unchanged tool drafts/projects |
 | `DetailRegionTest` | Native overlay geometry, real detail brush over a base mask, padding/cancelled gesture rejection, compare, undo/redo/cancel, recreation, portable reopen/PNG agreement and stale frame rejection |
-| `FileProjectTest`, `BoundedHeapProjectTest` | File/provider reads, v1–v6, malformed directory and payload rejection, staging cleanup, and a 64 MiB original import and project read in a separate 96 MiB JVM heap; the latter runs automatically with `:editor-core:test` |
+| `FileProjectTest`, `BoundedHeapProjectTest` | File/provider reads, v1–v7, malformed directory and payload rejection, staging cleanup, and a 64 MiB original import and project read in a separate 96 MiB JVM heap; the latter runs automatically with `:editor-core:test` |
 | `LargeImageTest` | 12 MP JPEG full-size output and EXIF, 48 MP editable round trip and local/crop coordinates, 100 MP bounded preview and process-owner restore, 201 MP JPEG native detail/round-trip/reduced export, >32 MiB encoded image edit/save/library reopen/provider reopen/export integrity, project-read memory refusal preserving saved data, sampled-alpha rejection and memory refusal before truncating an output |
 | `SofteningTest` | JNI/full-image versus halo-strip pixels, zero-strength and zero-mask identity, editable softening round trip and independent PNG decode |
 | `PortraitRegionTest` | Real offline model inference with no face, failure/cancellation preserving existing edits, absence of network/upload components, synthetic non-face rejection and fallback cancellation, persisted base + manual correction, history, PNG and detail agreement |
@@ -83,3 +83,13 @@ Retain both results. A prior successful run, an unchanged source tree or synchro
 
 
 The API35 x86_64 16KiB test uses a corrected, checksummed official GKI kernel; ordinary API35 4KiB is tested separately. See [runtime diagnosis and kernel identity](android-16k-runtime.md). This emulator configuration does not establish physical-phone compatibility.
+
+
+Independent-region regression coverage: `LocalRegionsTest` in core covers lifecycle,
+limits, archive integrity, atomic failure, fine source-pixel marks and preservation
+of the legacy raster. Android `LocalRegionsTest` covers three independent color
+scopes, effect switches, creation-order overlap, geometry/detail parity, a tiny
+mark in a 12 MP PNG export and session cancel/undo/reopen. `LocalRegionsUiTest`
+exercises actual selection, painting, color controls, naming, switches, cancel,
+apply and reopening. These generated fixtures do not establish portrait aesthetics
+or physical-phone performance. See [pipeline contract](local-regions.md).

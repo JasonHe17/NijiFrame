@@ -14,6 +14,52 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import kotlin.math.min
 import kotlin.math.roundToInt
+import dev.nijiframe.editor.*
+
+@Composable
+internal fun RegionPicker(ui: EditorUi, editor: EditorViewModel) {
+    val draft=ui.draft ?: return
+    val regions=draft.localRegions
+    val active=regions.firstOrNull {it.id==draft.selectedRegionId} ?: regions.first()
+    val enabled=!ui.busy && !ui.comparing
+    var manage by remember {mutableStateOf(false)}
+    var choose by remember {mutableStateOf(false)}
+    Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
+        Box(Modifier.weight(1f)) {
+            TextButton(onClick={choose=true},enabled=enabled,modifier=Modifier.semantics {contentDescription="切换选区"}) {
+                Text("${active.name} · ${regions.indexOf(active)+1}/${regions.size}",maxLines=1,
+                    overflow=androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+            }
+            DropdownMenu(expanded=choose,onDismissRequest={choose=false}) {
+                regions.forEach {r ->
+                    DropdownMenuItem(text={Text(r.name+if(r.enabled) "" else " · 已关闭")},
+                        onClick={choose=false;editor.selectRegion(r.id)},
+                        modifier=Modifier.semantics {contentDescription="选择选区 ${r.name}"})
+                }
+            }
+        }
+        TextButton(onClick=editor::addRegion,enabled=enabled && regions.size<LocalRegion.MAX_REGIONS) {Text("新增选区")}
+        TextButton(onClick={manage=true},enabled=enabled) {Text("管理选区")}
+    }
+    if(manage) {
+        var name by remember(active.id) {mutableStateOf(active.name)}
+        AlertDialog(onDismissRequest={manage=false},title={Text("管理当前选区")},text={
+            Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(value=name,onValueChange={name=it.take(40)},label={Text("选区名称")},singleLine=true)
+                Row(verticalAlignment=Alignment.CenterVertically) {
+                    Checkbox(checked=active.enabled,onCheckedChange=editor::enableRegion,
+                        modifier=Modifier.semantics {contentDescription="启用选区效果"})
+                    Text("启用选区效果")
+                }
+                TextButton(onClick=editor::resetRegionEffects) {Text("复位本区效果")}
+                TextButton(onClick={editor.deleteRegion();manage=false}) {Text("删除选区")}
+                Text("${regions.size} / ${LocalRegion.MAX_REGIONS} 个选区 · 可撤销本次操作",style=MaterialTheme.typography.bodySmall)
+            }
+        },confirmButton={TextButton(onClick={editor.renameRegion(name);manage=false},
+            enabled=name.isNotBlank() && name.none {it.isISOControl()}) {Text("保存名称")}},
+            dismissButton={TextButton(onClick={manage=false}) {Text("关闭")}})
+    }
+}
 
 @Composable
 internal fun RegionModes(ui: EditorUi, editor: EditorViewModel, detail: Boolean=false, enabled: Boolean=true) {
@@ -38,15 +84,15 @@ internal fun RegionVisibility(ui: EditorUi, editor: EditorViewModel, enabled: Bo
     Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
         Checkbox(checked=ui.showRegion,onCheckedChange=editor::showRegion,enabled=enabled,
             modifier=Modifier.semantics {contentDescription="显示区域"})
-        val region=ui.draft?.local?.region
-        Text("显示区域 · ${region?.strokes?.size ?: 0} 笔"+if(region?.base!=null) " · 含建议" else "",
+        val region=ui.draft?.activeLocal?.region
+        Text("显示区域 · ${(region?.strokes?.size ?: 0)+(region?.refinements?.size ?: 0)} 笔"+if(region?.base!=null) " · 含建议" else "",
             style=MaterialTheme.typography.bodySmall,modifier=Modifier.weight(1f))
         TextButton(onClick=editor::clearRegion,enabled=enabled && region?.isEmpty==false) {Text("清空区域")}
     }
 }
 
 @Composable
-internal fun BrushSettings(ui: EditorUi, editor: EditorViewModel, enabled: Boolean=true) {
+internal fun BrushSettings(ui: EditorUi, editor: EditorViewModel, enabled: Boolean=true, detail: Boolean=false) {
     var hardness by rememberSaveable {mutableStateOf(false)}
     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(6.dp)) {
         FilterChip(selected=!hardness,onClick={hardness=false},label={Text("笔刷大小")},enabled=enabled)
@@ -57,6 +103,12 @@ internal fun BrushSettings(ui: EditorUi, editor: EditorViewModel, enabled: Boole
             ParameterControl("brush-hardness","边缘硬度",ui.brushHardness*100,0f..100f,50f,"%",ruler=false,
                 description="区域边缘硬度",enabled=enabled,onChange={editor.brushHardness(it/100)},onFinished={})
         }
+    } else if(detail) {
+        key("fine-radius") {
+            ParameterControl("fine-brush-radius","精细笔刷直径",ui.fineBrushDiameter,1f..128f,8f,"px",ruler=false,
+                description="原图像素笔刷直径",enabled=enabled,onChange=editor::fineBrushDiameter,onFinished={})
+        }
+        Text("按原图像素修正，仅影响当前选区",style=MaterialTheme.typography.labelSmall)
     } else {
         val m=ui.project?.manifest
         val pixels=if(m==null) 0 else (ui.brushRadius*2*min(m.width,m.height)).roundToInt()

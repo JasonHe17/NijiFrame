@@ -21,6 +21,9 @@ internal enum class EditorParameter(
     VIGNETTE("暗角",EditorTool.DETAILS,-100f..100f,glyph=Glyph.CONTRAST),
     ANGLE("校正",EditorTool.GEOMETRY,-45f..45f,"°",Glyph.ROTATE,step=.5f,fineStep=.1f),
     LOCAL_EXPOSURE("局部曝光",EditorTool.LOCAL,-3f..3f,"EV",step=.05f,fineStep=.01f),
+    LOCAL_WARMTH("局部色温",EditorTool.LOCAL,-100f..100f,glyph=Glyph.COLOR),
+    LOCAL_TINT("局部色调",EditorTool.LOCAL,-100f..100f,glyph=Glyph.COLOR),
+    LOCAL_SATURATION("局部饱和度",EditorTool.LOCAL,-100f..100f,glyph=Glyph.COLOR),
     SOFTEN("柔肤",EditorTool.LOCAL,0f..100f,"%",Glyph.FACE,false),
     PROTECTION("细节保护",EditorTool.LOCAL,0f..100f,"%",Glyph.SHIELD,false);
 
@@ -28,7 +31,8 @@ internal enum class EditorParameter(
         EXPOSURE->e.exposureEv;CONTRAST->e.contrast*100;HIGHLIGHTS->e.highlights*100;SHADOWS->e.shadows*100
         WHITES->e.whites*100;BLACKS->e.blacks*100;SATURATION->(e.saturation-1)*100;VIBRANCE->e.vibrance*100
         WARMTH->e.warmth*100;TINT->e.tint*100;SHARPEN->e.sharpen*100;VIGNETTE->e.vignette*100
-        ANGLE->e.straighten;LOCAL_EXPOSURE->e.local.exposureEv;SOFTEN->e.local.soften*100;PROTECTION->e.local.detailProtection*100
+        ANGLE->e.straighten;LOCAL_EXPOSURE->e.activeLocal.exposureEv;SOFTEN->e.activeLocal.soften*100;PROTECTION->e.activeLocal.detailProtection*100
+        LOCAL_WARMTH->e.activeLocal.warmth*100;LOCAL_TINT->e.activeLocal.tint*100;LOCAL_SATURATION->(e.activeLocal.saturation-1)*100
     }
     fun set(e: Edit, value: Float): Edit {
         require(value.isFinite())
@@ -38,8 +42,11 @@ internal enum class EditorParameter(
             SHADOWS->e.copy(shadows=v/100);WHITES->e.copy(whites=v/100);BLACKS->e.copy(blacks=v/100)
             SATURATION->e.copy(saturation=1+v/100);VIBRANCE->e.copy(vibrance=v/100);WARMTH->e.copy(warmth=v/100)
             TINT->e.copy(tint=v/100);SHARPEN->e.copy(sharpen=v/100);VIGNETTE->e.copy(vignette=v/100)
-            ANGLE->e.copy(straighten=v);LOCAL_EXPOSURE->e.copy(local=e.local.copy(exposureEv=v))
-            SOFTEN->e.copy(local=e.local.copy(soften=v/100));PROTECTION->e.copy(local=e.local.copy(detailProtection=v/100))
+            ANGLE->e.copy(straighten=v);LOCAL_EXPOSURE->e.withActiveLocal(e.activeLocal.copy(exposureEv=v))
+            SOFTEN->e.withActiveLocal(e.activeLocal.copy(soften=v/100));PROTECTION->e.withActiveLocal(e.activeLocal.copy(detailProtection=v/100))
+            LOCAL_WARMTH->e.withActiveLocal(e.activeLocal.copy(warmth=v/100))
+            LOCAL_TINT->e.withActiveLocal(e.activeLocal.copy(tint=v/100))
+            LOCAL_SATURATION->e.withActiveLocal(e.activeLocal.copy(saturation=1+v/100))
         }
     }
     val neutral get()=get(Edit())

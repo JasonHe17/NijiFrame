@@ -14,9 +14,41 @@ data class Edit(val exposureEv: Float = 0f, val saturation: Float = 1f,
                 val tint: Float = 0f, val vibrance: Float = 0f,
                 val sharpen: Float = 0f, val vignette: Float = 0f,
                 val flipHorizontal: Boolean = false, val flipVertical: Boolean = false,
-                val straighten: Float = 0f, val local: LocalAdjustment = LocalAdjustment()) {
+                val straighten: Float = 0f, val local: LocalAdjustment = LocalAdjustment(),
+                val regions: List<LocalRegion> = emptyList(), val selectedRegionId: String? = null) {
+    val activeLocal: LocalAdjustment get()=regions.firstOrNull {it.id==selectedRegionId}?.adjustment ?: regions.firstOrNull()?.adjustment ?: local
+    val localRegions: List<LocalRegion> get()=regions.ifEmpty {listOf(LocalRegion("legacy","区域 1",local))}
+    fun withActiveLocal(value: LocalAdjustment): Edit = if(regions.isEmpty()) copy(local=value) else
+        copy(regions=regions.map {if(it.id==(selectedRegionId ?: regions.first().id)) it.copy(adjustment=value) else it})
+    fun addRegion(id: String, name: String): Edit {
+        val previous=localRegions
+        require(previous.size<LocalRegion.MAX_REGIONS) { "最多保留 ${LocalRegion.MAX_REGIONS} 个区域" }
+        require(previous.none {it.id==id}) { "Duplicate region identifier" }
+        return copy(local=LocalAdjustment(),regions=previous+LocalRegion(id,name),selectedRegionId=id)
+    }
+    fun selectRegion(id: String): Edit {
+        require(localRegions.any {it.id==id}) { "Unknown region" }
+        return if(regions.isEmpty()) this else copy(selectedRegionId=id)
+    }
+    fun changeActiveRegion(change: (LocalRegion)->LocalRegion): Edit {
+        val id=selectedRegionId ?: localRegions.first().id
+        return copy(local=LocalAdjustment(),regions=localRegions.map {if(it.id==id) change(it) else it},selectedRegionId=id)
+    }
+    fun deleteActiveRegion(): Edit {
+        val id=selectedRegionId ?: localRegions.first().id
+        val remaining=localRegions.filterNot {it.id==id}
+        return copy(local=LocalAdjustment(),regions=remaining,selectedRegionId=remaining.firstOrNull()?.id)
+    }
+    fun withoutLocalEffects(): Edit=copy(local=LocalAdjustment(),regions=emptyList(),selectedRegionId=null)
     fun validate(width: Int, height: Int, sourceCrop: Boolean = false) {
         local.validate();local.region.validateWork(width,height)
+        require(regions.size<=LocalRegion.MAX_REGIONS && regions.map {it.id}.distinct().size==regions.size) { "Invalid region count or identifiers" }
+        require(regions.isEmpty() || local==LocalAdjustment()) { "Ambiguous local adjustments" }
+        require(selectedRegionId==null || regions.any {it.id==selectedRegionId}) { "Invalid selected region" }
+        regions.forEach {it.validate();it.adjustment.region.validateWork(width,height)}
+        val all=listOf(local)+regions.map {it.adjustment}
+        require(all.sumOf {it.region.strokes.size+it.region.refinements.size}<=256 &&
+            all.sumOf {a->(a.region.strokes+a.region.refinements).sumOf {it.points.size}}<=8192) { "选区总复杂度达到上限，请撤销部分笔画" }
         require(exposureEv.isFinite() && exposureEv in -3f..3f) { "Invalid exposure" }
         require(saturation.isFinite() && saturation in 0f..2f) { "Invalid saturation" }
         require(listOf(contrast, highlights, shadows, whites, blacks, warmth, tint, vibrance, vignette)
@@ -35,8 +67,8 @@ data class Edit(val exposureEv: Float = 0f, val saturation: Float = 1f,
 
 @Serializable
 data class Manifest(
-    val version: Int = 6,
-    val pipeline: String = "srgb-import-v6",
+    val version: Int = 7,
+    val pipeline: String = "srgb-regions-v7",
     val source: String = "assets/original",
     val sourceBytes: Int,
     val sourceSha256: String,
@@ -53,7 +85,11 @@ data class Manifest(
             (version == 3 && pipeline == "srgb-local-v3") ||
             (version == 4 && pipeline == "srgb-soften-v4") ||
             (version == 5 && pipeline == "srgb-region-v5") ||
-            (version == 6 && pipeline == "srgb-import-v6")) { "Unsupported project version or operation" }
+            (version == 6 && pipeline == "srgb-import-v6") ||
+            (version == 7 && pipeline == "srgb-regions-v7")) { "Unsupported project version or operation; update NijiFrame to open this project" }
+        if(version<7) require(edit.regions.isEmpty() && edit.selectedRegionId==null &&
+            edit.local.warmth==0f && edit.local.tint==0f && edit.local.saturation==1f &&
+            edit.local.region.refinements.isEmpty()) { "Legacy project cannot contain v7 local adjustments" }
         if(version < 6) require(!honorExifColorSpace) { "Legacy project cannot change EXIF color interpretation" }
         if(version < 5) require(edit.local.region.base == null) { "Legacy project cannot contain base coverage" }
         if(version < 4) require(edit.local.soften == 0f && edit.local.detailProtection == .75f) { "Legacy project cannot contain softening" }
@@ -69,7 +105,7 @@ data class Manifest(
         require(width in 1..MAX_EDGE && height in 1..MAX_EDGE && width.toLong() * height <= MAX_PIXELS) { "Unsupported image dimensions" }
         edit.validate(width, height, sourceCrop = version == 1)
     }
-    fun current(): Manifest = copy(version = 6, pipeline = "srgb-import-v6",
+    fun current(): Manifest = copy(version = 7, pipeline = "srgb-regions-v7",
         edit = if(version == 1) edit.copy(crop = edit.crop?.let { Geometry.legacyCrop(it,width,height,edit.turns) }) else edit)
     companion object {
         // Include 200 MP-class dimensions such as 16384x12288 (201,326,592 pixels).
@@ -80,7 +116,7 @@ data class Manifest(
 }
 
 data class Project(val manifest: Manifest, val original: ByteArray) {
-    fun withEdit(edit: Edit): Project = copy(manifest = manifest.copy(version = 6, pipeline = "srgb-import-v6", edit = edit, localMask = null))
+    fun withEdit(edit: Edit): Project = copy(manifest = manifest.copy(version = 7, pipeline = "srgb-regions-v7", edit = edit, localMask = null))
 }
 
 /** History contains parameters and immutable region descriptions, never rendered bitmaps. A completed gesture contributes one entry. */

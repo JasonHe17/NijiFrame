@@ -1,12 +1,12 @@
-# Editable project format v6
+# Editable project format v7
 
 Status: implemented experimental processing contract, not a stable cross-platform guarantee. File extension `.nijiproj`; Android document export uses `application/octet-stream` to preserve this extension.
 
 ## Container and validation
 
-ZIP contains `project.json` (UTF-8 JSON, at most 16 KiB) and `assets/original` (unchanged encoded image, at most 64 MiB). An optional `assets/local-mask.json` contains the versioned region (at most 512 KiB). Complete archive limit: 65.5 MiB. Reading validates the central directory and paths, regular-file modes, payload CRCs, length, SHA-256, operation version and numerical bounds. Duplicate/unexpected paths, comments, ZIP64, encryption, missing resources and incomplete archives fail. No archive paths are extracted to the filesystem. Local editing and provider imports use the [bounded file reader](project-storage.md); v6 payloads and rendering semantics are unchanged.
+ZIP contains `project.json` (UTF-8 JSON, at most 16 KiB) and `assets/original` (unchanged encoded image, at most 64 MiB). An optional `assets/local-mask.json` contains versioned region coverage (at most 512 KiB total). Complete archive limit: 65.5 MiB. Reading validates the central directory and paths, regular-file modes, payload CRCs, length, SHA-256, operation version and numerical bounds. Duplicate/unexpected paths, comments, ZIP64, encryption, missing resources and incomplete archives fail. No archive paths are extracted to the filesystem. Local editing and provider imports use the [bounded file reader](project-storage.md); v6 payloads and rendering semantics are unchanged.
 
-The manifest contains `version: 6`, `pipeline: "srgb-import-v6"`, `source: "assets/original"`, `sourceBytes`, lowercase `sourceSha256`, source-oriented `width` / `height`, a project `name` (1–80 characters, no control characters), `edit`, and `honorExifColorSpace` (boolean). Unknown fields and unsupported operations are rejected. Original source dimensions are at most 210,000,000 pixels and 32,768 pixels per edge after EXIF normalization; original metadata must match even when decoding a preview sample. Platform URIs and filesystem paths are never portable identifiers.
+The manifest contains `version: 7`, `pipeline: "srgb-regions-v7"`, `source: "assets/original"`, `sourceBytes`, lowercase `sourceSha256`, source-oriented `width` / `height`, a project `name` (1–80 characters, no control characters), `edit`, and `honorExifColorSpace` (boolean). Unknown fields and unsupported operations are rejected. Original source dimensions are at most 210,000,000 pixels and 32,768 pixels per edge after EXIF normalization; original metadata must match even when decoding a preview sample. Platform URIs and filesystem paths are never portable identifiers.
 
 ## Edit parameters and order
 
@@ -58,7 +58,7 @@ Processing uses source strips with a radius-sized halo; it must match the full-i
 
 ## v1 / v2 / v3 migration
 
-Read the v1 `srgb-tone-crop-turn-v1` pipeline with its original source-coordinate crop, exposure, saturation and turns. All v2-only controls must be neutral in a v1 manifest. Convert the old crop rectangle into the quarter-turned full-image coordinate system, then upgrade to v6. This gives the same output for the supported v1 operations; never silently change a crop or drop an effect. V2 keeps its geometry and global adjustment semantics, with an empty local region and zero local exposure. Legacy versions cannot contain local operations or mask resources. V3 regions and local exposure are preserved while softening remains zero. Versions below v4 reject nonneutral softening parameters. V4 strokes, local exposure, softening and detail protection retain their numerical semantics. New current projects save as v6. V5 base coverage and all existing effects retain their values. Older apps must reject v6 rather than silently reinterpret newly accepted sources. Versions below v5 cannot contain base coverage, including in the external mask resource.
+Read the v1 `srgb-tone-crop-turn-v1` pipeline with its original source-coordinate crop, exposure, saturation and turns. All v2-only controls must be neutral in a v1 manifest. Convert the old crop rectangle into the quarter-turned full-image coordinate system, then upgrade to v7. This gives the same output for the supported v1 operations; never silently change a crop or drop an effect. V2 keeps its geometry and global adjustment semantics, with an empty local region and zero local exposure. Legacy versions cannot contain local operations or mask resources. V3 regions and local exposure are preserved while softening remains zero. Versions below v4 reject nonneutral softening parameters. V4 strokes, local exposure, softening and detail protection retain their numerical semantics. New current projects save as v7. V5 base coverage and all existing effects retain their values. Older apps must reject v6 rather than silently reinterpret newly accepted sources. Versions below v5 cannot contain base coverage, including in the external mask resource.
 
 ## Local persistence boundary
 
@@ -85,3 +85,61 @@ Decode the base, bilinearly sample at the centers of the existing long-edge-1024
 ## V6 input interpretation
 
 V6 / `srgb-import-v6` changes the source-decoding contract, with one new manifest flag and no mask changes. `honorExifColorSpace` defaults to false for old archives and is true for new imports. It controls only the unprofiled Adobe RGB EXIF fallback; embedded profile conversion is unchanged. This preserves how earlier editors interpreted already accepted untagged JPEGs, including those whose EXIF hints they ignored. Editing or exporting a legacy project retains false; import its original as a new photo to adopt the new EXIF interpretation. Original bytes and hashes remain unchanged. V1–v5 migrate their parameters into v6; previously accepted sRGB JPEG/PNG keep their rendering semantics. Common source RGB profiles, EXIF Adobe RGB, 16-bit PNG and new codecs enter the same existing 8-bit sRGB effect pipeline. Standalone HDR transfer functions, transparency and unavailable codecs are refused. Wide-gamut colors outside sRGB may clip and precision is reduced. HEIF/AVIF detail decoding can require whole-frame codec memory. No new HDR output or Windows decoder is implied.
+
+
+## Independent regions and source-pixel refinements (v7)
+
+V7 / `srgb-regions-v7` retains v6 source interpretation and the legacy `edit.local`
+single-region data. `edit.regions` is an optional creation-ordered list of at most
+four entries. Each entry has an ASCII alphanumeric/hyphen `id` (1–64 characters),
+a `name` (1–40 characters, nonblank and no control characters), `enabled` (default
+true) and `adjustment`. Identifiers must be unique. Nonempty `regions` requires
+neutral/empty legacy `local`. `selectedRegionId` is null or an existing list ID;
+it selects controls and coverage overlay, never the compositing order. Promoting
+a legacy region copies it to the first list entry with unchanged coverage and
+parameters. Deleting the last entry leaves an empty neutral working region.
+
+Every adjustment adds `warmth` and `tint` in [-1,1] (default 0), and `saturation`
+in [0,2] (default 1), to legacy exposure/softening/protection. Relative warmth is
+not Kelvin. Empty or disabled regions do not affect pixels. Source softening
+candidates always read original neighbors; each candidate blends into the
+accumulated pixel in list order, before global tone. This preserves legacy output
+for one region and requires only one neighborhood halo for overlapping regions.
+Global tone is followed by each enabled local color adjustment, then the existing
+geometry, sharpening and vignette stages.
+
+For local color, decode the current 8-bit pixel to linear RGB `(r,g,b)`. Let
+`gain=2^EV`, `R=r*gain*2^(.4*warmth)`, `G=g*gain*2^(-.3*tint)`,
+`B=b*gain*2^(-.4*warmth)`, and `Y=.2126R+.7152G+.0722B`. The target is
+`Y+saturation*((R,G,B)-Y)`. Interpolate the original linear pixel toward that
+target using coverage/255, then clip, encode and round. Pure exposure calls the
+legacy function to retain its exact fractional-coverage rounding. Subsequent
+regions consume the previous region's quantized color. Overlap may compound
+color and softening; selection never reorders it.
+
+The same optional `localMask` descriptor/digest now identifies a v7 JSON payload
+`{"legacy": Region, "regions": {"region-id": Region}}`. Only nonempty named
+coverage is written; absent entries mean empty coverage. Unknown IDs, legacy
+coverage combined with a region list, oversized data and invalid numbers fail
+validation. V1–v6 mask resources keep their original single-Region payload and
+are validated under that original version before migration. New operations in
+an old-version manifest/resource are rejected. Older applications reject v7.
+
+A v7 Region adds ordered `refinements` alongside the unchanged `strokes` and
+`base`. These corrections use the same segment-distance, hardness, 8-bit
+quantization and max/min add/erase formulas, evaluated directly at source pixel
+centers, with radius in [1/65536,.25] of the short source edge. They run after the
+legacy 1024-edge raster is sampled; existing strokes are never reinterpreted.
+The detail brush exposes a 1–128 source-pixel diameter (clamped to the region
+radius bound on tiny images). Later overview strokes append after refinements
+once precise corrections exist, preserving gesture order. Rasterization is
+bounded to the requested strip/window, not a full source-sized mask. A small
+mark may disappear in a thumbnail but survives original-resolution detail and
+export. This is coverage editing, not semantic hair matting or spot healing.
+
+Each region retains 128 strokes/4096 points total across legacy and precise
+strokes. Across all regions the cap is 256 strokes/8192 points. Both legacy and
+source-resolution segment-work estimates are bounded to 64 million visits per
+region and the combined resource remains 512 KiB. The editor checks serialized
+resource size before accepting a draft mutation; a failed atomic write retains
+the previous complete archive. See [local region behavior](local-regions.md).

@@ -54,7 +54,7 @@ class DetailRegionTest {
             instrumentation.runOnMainSync {
                 model.regionMode(RegionMode.ERASE)
                 model.addDetailStroke(listOf(MaskPoint(.7f,.6f)),requireNotNull(model.ui.value.detail))
-                assertEquals(1,model.ui.value.draft!!.local.region.strokes.size)
+                assertEquals(1,model.ui.value.draft!!.local.region.refinements.size)
                 model.loadDetail(160,120);model.closeDetail()
             }
             settled()
@@ -114,7 +114,7 @@ class DetailRegionTest {
         fun ready(count: Int) {
             fun frameReady(): Boolean = model.ui.value.let { ui ->
                 ui.detail?.loading==false && ui.detail.bitmap!=null &&
-                    ui.draft?.local?.region?.strokes?.size==count
+                    ui.draft?.local?.region?.refinements?.size==count
             }
             // Accessibility can retain the preceding canvas while the new frame is rendering.
             // Wait for the actual frame first, then let its UI/accessibility update settle.
@@ -151,7 +151,7 @@ class DetailRegionTest {
         val scenario=ActivityScenario.launch(MainActivity::class.java)
         scenario.onActivity { model=ViewModelProvider(it)[EditorViewModel::class.java] }
         val events=java.util.Collections.synchronizedList(mutableListOf<String>())
-        fun state(): String = model.ui.value.let { "mode=${it.regionMode} strokes=${it.draft?.local?.region?.strokes?.size} " +
+        fun state(): String = model.ui.value.let { "mode=${it.regionMode} strokes=${it.draft?.local?.region?.refinements?.size} " +
             "frame=${System.identityHashCode(it.detail)} revision=${it.detail?.revision} loading=${it.detail?.loading} " +
             "bitmap=${it.detail?.bitmap?.width}x${it.detail?.bitmap?.height} error=${it.detail?.error}" }
         fun record(message: String) = synchronized(events) {
@@ -193,11 +193,11 @@ class DetailRegionTest {
             assertTrue("Landscape retains a usable detail window",desc("细节区域画布").visibleBounds.height()>80)
             device.setOrientationNatural();ready(2)
             tap("关闭细节");tap("应用调整")
-            await {library.read(id).manifest.edit.local.region.strokes.size==2}
+            await {library.read(id).manifest.edit.local.region.refinements.size==2}
             val saved=library.read(id)
             assertEquals(base,saved.manifest.edit.local.region.base)
             assertArrayEquals(original,saved.original)
-            val strokes=saved.manifest.edit.local.region.strokes
+            val strokes=saved.manifest.edit.local.region.refinements
             assertTrue(strokes[0].erase);assertFalse(strokes[1].erase)
             val expected=requireNotNull(SourceGeometry(600,400,initial).toSource(210f,240f))
             assertEquals("Inverse-mapped source X",expected.x,strokes[0].points.first().x,.003f)

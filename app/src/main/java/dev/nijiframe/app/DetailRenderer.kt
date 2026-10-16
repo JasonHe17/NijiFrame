@@ -16,7 +16,7 @@ internal object DetailRenderer {
     suspend fun regionOverlay(width: Int,height: Int,edit: Edit,bounds: Rect): Bitmap {
         require(bounds.width() in 1..MAX_EDGE && bounds.height() in 1..MAX_EDGE)
         val context=currentCoroutineContext()
-        val mask=MaskRaster.create(edit.local.region,width,height) {context.ensureActive()}
+        val mask=RegionCoverage(edit.activeLocal.region,width,height) {context.ensureActive()}
         val mapping=SourceGeometry(width,height,edit)
         val pixels=IntArray(bounds.width()*bounds.height())
         for(y in 0 until bounds.height()) {
@@ -63,7 +63,7 @@ internal object DetailRenderer {
             val box=RectF(straightBounds);inverse.mapRect(box)
             Rect(floor(box.left).toInt()-2,floor(box.top).toInt()-2,ceil(box.right).toInt()+2,ceil(box.bottom).toInt()+2)
         }
-        val radius=if(edit.local.soften>0f) (min(m.width,m.height)/600f).roundToInt().coerceIn(1,6) else 0
+        val radius=if(edit.localRegions.any {it.enabled && it.adjustment.soften>0f && !it.adjustment.region.isEmpty}) (min(m.width,m.height)/600f).roundToInt().coerceIn(1,6) else 0
         val info=ImagePipeline.inspect(project.original,project.manifest.honorExifColorSpace)
         require(info.width==m.width && info.height==m.height) {"工程尺寸与原图不一致"}
         // JPEG chroma interpolation also needs neighbors beyond the requested region, even with neutral effects.

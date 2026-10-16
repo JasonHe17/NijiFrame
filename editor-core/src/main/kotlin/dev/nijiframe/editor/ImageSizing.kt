@@ -32,6 +32,10 @@ object ImageSizing {
             e.crop != null || e.sharpen != 0f) 1 else 0
         // Even without a transform, resizing/encoding can overlap the output with another bitmap.
         val buffers = (if (sourceAlreadyLoaded) 0 else 1) + 1 + maxOf(extra, if (resizing) 1 else 0)
-        return pixels * 4 * buffers + 24L * 1024 * 1024
+        val localCount=e.localRegions.count {it.enabled && it.adjustment.hasEffect && !it.adjustment.region.isEmpty}
+        // The original scratch allowance covers one mask. Additional regions retain
+        // a 1024-edge coverage grid and one source-width strip simultaneously.
+        val extraMasks=maxOf(0,localCount-1).toLong()*(1024L*1024+ceilDiv(manifest.width,sample).toLong()*32)
+        return pixels * 4 * buffers + 24L * 1024 * 1024 + extraMasks
     }
 }

@@ -31,7 +31,7 @@ internal fun DetailRegionInput(ui: EditorUi,editor: EditorViewModel) {
     val left=((size.width-bounds.width())/2f).roundToInt()
     val top=((size.height-bounds.height())/2f).roundToInt()
     Canvas(Modifier.fillMaxSize().onSizeChanged {size=it}.semantics {contentDescription="细节区域画布"}
-        .pointerInput(detail,size,ui.regionMode,ui.brushRadius,ui.brushHardness) {
+        .pointerInput(detail,size,ui.regionMode,ui.fineBrushDiameter,ui.brushHardness) {
             fun convert(p: Offset): MaskPoint? {
                 val x=p.x-left;val y=p.y-top
                 if(x<0 || y<0 || x>=bounds.width() || y>=bounds.height()) return null
@@ -55,7 +55,7 @@ internal fun DetailRegionInput(ui: EditorUi,editor: EditorViewModel) {
                             val last=pending.last()
                             if(pending.size<Region.MAX_POINTS &&
                                 (hypot((point.x-last.x)*manifest.width,(point.y-last.y)*manifest.height)>=
-                                    max(1f,ui.brushRadius*min(manifest.width,manifest.height)*.1f) || !change.pressed))
+                                    max(.5f,ui.fineBrushDiameter*.05f) || !change.pressed))
                                 pending=pending+point
                             change.consume()
                             if(!change.pressed) break

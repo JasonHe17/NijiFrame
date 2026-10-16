@@ -126,3 +126,24 @@ int nf_local_exposure(uint32_t* pixels, const uint8_t* mask, size_t count, float
     }
     return 0;
 }
+
+int nf_local_color(uint32_t* pixels, const uint8_t* mask, size_t count, float ev, float warmth, float tint, float sat) {
+    if ((!pixels && count) || (!mask && count) || !std::isfinite(ev) || ev < -3 || ev > 3 ||
+        !std::isfinite(warmth) || warmth < -1 || warmth > 1 || !std::isfinite(tint) || tint < -1 || tint > 1 ||
+        !std::isfinite(sat) || sat < 0 || sat > 2) return -1;
+    // This route also preserves legacy fractional-mask exposure rounding exactly.
+    if (warmth==0 && tint==0 && sat==1) return nf_local_exposure(pixels,mask,count,ev);
+    float lut[256];
+    for (int i=0;i<256;++i) lut[i]=linear(i/255.0f);
+    const float gain=std::exp2(ev), rg=std::exp2(warmth*.4f), gg=std::exp2(-tint*.3f), bg=std::exp2(-warmth*.4f);
+    for(size_t i=0;i<count;++i) {
+        if(mask[i]==0) continue;
+        const auto p=pixels[i];
+        const float r=lut[(p>>16)&255],g=lut[(p>>8)&255],b=lut[p&255];
+        const float rr=r*gain*rg, gr=g*gain*gg, br=b*gain*bg;
+        const float luma=.2126f*rr+.7152f*gr+.0722f*br, amount=mask[i]/255.0f;
+        pixels[i]=0xff000000u | (encoded(r+amount*(luma+sat*(rr-luma)-r))<<16) |
+            (encoded(g+amount*(luma+sat*(gr-luma)-g))<<8) | encoded(b+amount*(luma+sat*(br-luma)-b));
+    }
+    return 0;
+}

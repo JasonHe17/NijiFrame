@@ -30,13 +30,16 @@ import kotlin.math.*
         }
     }
 }
-@Serializable data class Region(val strokes: List<MaskStroke> = emptyList(), val base: BaseCoverage? = null) {
-    val isEmpty: Boolean get() = strokes.isEmpty() && base == null
+@Serializable data class Region(val strokes: List<MaskStroke> = emptyList(), val base: BaseCoverage? = null,
+    val refinements: List<MaskStroke> = emptyList()) {
+    val isEmpty: Boolean get() = strokes.isEmpty() && base == null && refinements.isEmpty()
     fun validate() {
         base?.validate()
-        require(strokes.size <= MAX_STROKES && strokes.sumOf { it.points.size } <= MAX_POINTS) { "区域笔画过多，请撤销部分笔画" }
-        strokes.forEach { stroke ->
-            require(stroke.points.isNotEmpty() && stroke.radius.isFinite() && stroke.radius in .005f.. .25f &&
+        val all=strokes+refinements
+        require(all.size <= MAX_STROKES && all.sumOf { it.points.size } <= MAX_POINTS) { "区域笔画过多，请撤销部分笔画" }
+        all.forEachIndexed { index, stroke ->
+            val minimum=if(index<strokes.size) .005f else 1f/65536
+            require(stroke.points.isNotEmpty() && stroke.radius.isFinite() && stroke.radius in minimum.. .25f &&
                 stroke.hardness.isFinite() && stroke.hardness in 0f..1f) { "Invalid brush" }
             require(stroke.points.all { it.x.isFinite() && it.y.isFinite() && it.x in 0f..1f && it.y in 0f..1f }) { "Invalid region coordinate" }
         }
@@ -54,17 +57,42 @@ import kotlin.math.*
             work+=bw.toLong()*bh
             require(work<=64_000_000) { "区域过于复杂，请撤销部分笔画" }
         }
+        var preciseWork=0L
+        for(stroke in refinements) for(i in stroke.points.indices) {
+            val a=stroke.points[max(0,i-1)];val b=stroke.points[i]
+            val radius=stroke.radius*min(width,height)
+            val bw=min(width.toDouble(),ceil(abs(a.x-b.x)*width+2.0*radius)+2).toLong()
+            val bh=min(height.toDouble(),ceil(abs(a.y-b.y)*height+2.0*radius)+2).toLong()
+            preciseWork+=bw*bh
+            require(preciseWork<=64_000_000) { "精细区域过于复杂，请撤销部分笔画" }
+        }
     }
     companion object { const val MAX_STROKES=128; const val MAX_POINTS=4096 }
 }
 @Serializable data class LocalAdjustment(val exposureEv: Float = 0f,
-    @Transient val region: Region = Region(), val soften: Float = 0f, val detailProtection: Float = .75f) {
+    @Transient val region: Region = Region(), val soften: Float = 0f, val detailProtection: Float = .75f,
+    val warmth: Float = 0f, val tint: Float = 0f, val saturation: Float = 1f) {
+    val hasColor: Boolean get()=exposureEv!=0f || warmth!=0f || tint!=0f || saturation!=1f
+    val hasEffect: Boolean get()=hasColor || soften!=0f
     fun validate() {
         require(exposureEv.isFinite() && exposureEv in -3f..3f)
         require(soften.isFinite() && soften in 0f..1f && detailProtection.isFinite() && detailProtection in 0f..1f) { "Invalid softening parameters" }
+        require(warmth.isFinite() && warmth in -1f..1f && tint.isFinite() && tint in -1f..1f &&
+            saturation.isFinite() && saturation in 0f..2f) { "Invalid local color" }
         region.validate()
     }
 }
+@Serializable data class LocalRegion(val id: String, val name: String, val adjustment: LocalAdjustment = LocalAdjustment(),
+    val enabled: Boolean = true) {
+    fun validate() {
+        require(id.matches(Regex("[a-zA-Z0-9-]{1,64}"))) { "Invalid region identifier" }
+        require(name.isNotBlank() && name.length<=40 && name.none {it.isISOControl()}) { "Invalid region name" }
+        adjustment.validate()
+    }
+    companion object { const val MAX_REGIONS=4 }
+}
+/** v7 resource payload. Parameters remain in the manifest, coverage is integrity checked separately. */
+@Serializable internal data class LocalMasks(val legacy: Region = Region(), val regions: Map<String, Region> = emptyMap())
 @Serializable data class MaskResource(val path: String="assets/local-mask.json", val bytes: Int, val sha256: String)
 
 /** Pixel-edge coordinates; normalize EXIF before using this mapping. */
@@ -106,6 +134,7 @@ class MaskRaster(val width: Int,val height: Int,val coverage: ByteArray) {
     }
     companion object {
         fun create(region: Region,sourceWidth: Int,sourceHeight: Int,check: ()->Unit={}): MaskRaster {
+            require(region.refinements.isEmpty()) { "Use RegionCoverage for source-resolution corrections" }
             region.validate();region.validateWork(sourceWidth,sourceHeight)
             val scale=min(1.0,1024.0/max(sourceWidth,sourceHeight))
             val w=max(1,(sourceWidth*scale).roundToInt());val h=max(1,(sourceHeight*scale).roundToInt())

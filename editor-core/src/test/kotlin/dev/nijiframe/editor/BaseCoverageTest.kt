@@ -15,7 +15,7 @@ class BaseCoverageTest {
         val legacy=current.copy(manifest=current.manifest.copy(version=5,honorExifColorSpace=false,pipeline="srgb-region-v5"))
         val encoded=ByteArrayOutputStream().also {ProjectIO.write(legacy,it)}.toByteArray()
         val loaded=ProjectIO.read(encoded.inputStream())
-        assertEquals(6,loaded.manifest.version);assertEquals("srgb-import-v6",loaded.manifest.pipeline)
+        assertEquals(7,loaded.manifest.version);assertEquals("srgb-regions-v7",loaded.manifest.pipeline)
         assertEquals(edit,loaded.manifest.edit);assertArrayEquals(legacy.original,loaded.original)
     }
     @Test fun baseThenManualCorrectionRoundTripsAndCanBeUndone() {
@@ -29,7 +29,7 @@ class BaseCoverageTest {
         val project=ProjectIO.create(byteArrayOf(1,2,3),100,100).withEdit(edit)
         val encoded=ByteArrayOutputStream().also {ProjectIO.write(project,it)}.toByteArray()
         val reopened=ProjectIO.read(encoded.inputStream())
-        assertEquals(6,reopened.manifest.version);assertEquals(edit,reopened.manifest.edit)
+        assertEquals(7,reopened.manifest.version);assertEquals(edit,reopened.manifest.edit)
         assertArrayEquals(project.original,reopened.original)
         assertArrayEquals(raster.coverage,MaskRaster.create(reopened.manifest.edit.local.region,100,100).coverage)
         val history=History(Edit(local=LocalAdjustment(region=original)))

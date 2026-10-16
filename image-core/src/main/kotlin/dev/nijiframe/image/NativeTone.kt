@@ -7,6 +7,9 @@ object NativeTone {
     external fun soften(source: IntArray, destination: IntArray, mask: ByteArray, width: Int, height: Int,
         firstRow: Int, rows: Int, radius: Int, strength: Float, protection: Float)
     external fun localExposure(pixels: IntArray, mask: ByteArray, count: Int, exposureEv: Float)
+    external fun localColor(pixels: IntArray, mask: ByteArray, count: Int, exposureEv: Float, warmth: Float, tint: Float, saturation: Float)
+    external fun softenMerge(source: IntArray, destination: IntArray, mask: ByteArray, width: Int, height: Int,
+        firstRow: Int, rows: Int, radius: Int, strength: Float, protection: Float)
     external fun apply(pixels: IntArray, count: Int, exposureEv: Float, saturation: Float)
     /** EV, saturation, contrast, highlights, shadows, whites, blacks, warmth, tint, vibrance. */
     external fun applyBasic(pixels: IntArray, count: Int, parameters: FloatArray)

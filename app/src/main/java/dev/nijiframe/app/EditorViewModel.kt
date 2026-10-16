@@ -34,7 +34,7 @@ data class EditorUi(
     val suggestion: Region? = null, val suggestionOverlay: Bitmap? = null,
     val sourceNotice: String? = null, val sourceWarning: String? = null, val detail: DetailUi? = null, val preview: Bitmap? = null, val regionOverlay: Bitmap? = null, val approximatePreview: Boolean = false,
     val regionMode: RegionMode = RegionMode.ADD, val showRegion: Boolean = true,
-    val brushRadius: Float = .06f, val brushHardness: Float = .5f,
+    val brushRadius: Float = .06f, val brushHardness: Float = .5f, val fineBrushDiameter: Float = 8f,
     val localCanUndo: Boolean = false, val localCanRedo: Boolean = false, val busy: Boolean = false, val saving: Boolean = false,
     val rendering: Boolean = false, val comparing: Boolean = false, val dirty: Boolean = false,
     val canUndo: Boolean = false, val canRedo: Boolean = false,
@@ -200,7 +200,7 @@ class EditorViewModel @JvmOverloads constructor(application: Application,
         beginTool(parameter.tool)
         selectParameter(parameter)
         if(parameter.tool==EditorTool.LOCAL) {
-            if(mutable.value.draft?.local?.region?.isEmpty==false) retouchStep(RetouchStep.EFFECT)
+            if(mutable.value.draft?.activeLocal?.region?.isEmpty==false) retouchStep(RetouchStep.EFFECT)
             else regionMode(RegionMode.MOVE)
         }
     }
@@ -223,6 +223,27 @@ class EditorViewModel @JvmOverloads constructor(application: Application,
     fun showRegion(show: Boolean) {mutable.value=mutable.value.copy(showRegion=show)}
     fun brushRadius(value: Float) {mutable.value=mutable.value.copy(brushRadius=value)}
     fun brushHardness(value: Float) {mutable.value=mutable.value.copy(brushHardness=value)}
+    fun fineBrushDiameter(value: Float) {if(value.isFinite()) mutable.value=mutable.value.copy(fineBrushDiameter=value.coerceIn(1f,128f))}
+    private fun regionChange(change: (Edit)->Edit) {
+        val state=mutable.value
+        if(state.tool!=EditorTool.LOCAL || state.busy || state.comparing || state.suggestion!=null) return
+        val edit=state.draft ?: return
+        try {
+            updateDraft(change(edit));localCheckpoint()
+        } catch(error: IllegalArgumentException) {mutable.value=mutable.value.copy(error=error.message ?: "无法修改区域")}
+    }
+    fun addRegion()=regionChange {edit -> edit.addRegion(java.util.UUID.randomUUID().toString(),"区域 ${edit.localRegions.size+1}")}
+    fun selectRegion(id: String) {
+        val state=mutable.value
+        if(state.tool!=EditorTool.LOCAL || state.busy || state.comparing || state.suggestion!=null) return
+        localCheckpoint()
+        state.draft?.let {updateDraft(it.selectRegion(id))}
+        mutable.value=mutable.value.copy(toolSession=mutable.value.toolSession+1)
+    }
+    fun renameRegion(name: String)=regionChange {it.changeActiveRegion {r -> r.copy(name=name.trim())}}
+    fun enableRegion(enabled: Boolean)=regionChange {it.changeActiveRegion {r -> r.copy(enabled=enabled)}}
+    fun resetRegionEffects()=regionChange {it.withActiveLocal(LocalAdjustment(region=it.activeLocal.region))}
+    fun deleteRegion()=regionChange {it.deleteActiveRegion()}
     fun localCheckpoint() {
         if(mutable.value.busy || mutable.value.comparing) return
         val edit=mutable.value.draft ?: return
@@ -239,26 +260,33 @@ class EditorViewModel @JvmOverloads constructor(application: Application,
         updateDraft(localHistory.redo())
         mutable.value=mutable.value.copy(localCanUndo=localHistory.canUndo,localCanRedo=localHistory.canRedo)
     }
-    fun addStroke(points: List<MaskPoint>) {
+    fun addStroke(points: List<MaskPoint>) = addStroke(points,false)
+    private fun addStroke(points: List<MaskPoint>, precise: Boolean) {
         val state=mutable.value;val edit=state.draft ?: return
         if(state.busy || state.comparing || state.regionMode==RegionMode.MOVE || state.tool!=EditorTool.LOCAL || points.isEmpty()) return
-        val stroke=MaskStroke(points.toList(),state.brushRadius,state.brushHardness,state.regionMode==RegionMode.ERASE)
-        val region=edit.local.region.copy(strokes=edit.local.region.strokes+stroke)
-        try {region.validate();region.validateWork(state.project!!.manifest.width,state.project.manifest.height)} catch(error: IllegalArgumentException) {
-            mutable.value=state.copy(error="区域笔画达到上限，请撤销部分笔画或清空区域");return
+        val manifest=state.project?.manifest ?: return
+        val radius=if(precise) (state.fineBrushDiameter/(2*minOf(manifest.width,manifest.height))).coerceIn(1f/65536,.25f) else state.brushRadius
+        val stroke=MaskStroke(points.toList(),radius,state.brushHardness,state.regionMode==RegionMode.ERASE)
+        val old=edit.activeLocal.region
+        val region=if(precise || old.refinements.isNotEmpty()) old.copy(refinements=old.refinements+stroke)
+            else old.copy(strokes=old.strokes+stroke)
+        try {
+            region.validate();region.validateWork(manifest.width,manifest.height)
+            updateDraft(edit.withActiveLocal(edit.activeLocal.copy(region=region)));localCheckpoint()
+        } catch(error: IllegalArgumentException) {
+            mutable.value=state.copy(error="区域资源达到上限，请撤销部分笔画或清空当前区域");return
         }
-        updateDraft(edit.copy(local=edit.local.copy(region=region)));localCheckpoint()
     }
     fun addDetailStroke(points: List<MaskPoint>, frame: DetailUi) {
         val current=mutable.value.detail ?: return
         // A gesture belongs to the displayed frame, never to a new location or comparison.
         if(current!==frame || current.loading || current.comparing || current.bitmap==null ||
             mutable.value.regionMode==RegionMode.MOVE) return
-        addStroke(points)
+        addStroke(points,true)
     }
     fun clearRegion() {
         val edit=mutable.value.draft ?: return
-        updateDraft(edit.copy(local=edit.local.copy(region=Region())));localCheckpoint()
+        updateDraft(edit.withActiveLocal(edit.activeLocal.copy(region=Region())));localCheckpoint()
     }
     fun suggestRegion() {
         val state=mutable.value
@@ -280,7 +308,7 @@ class EditorViewModel @JvmOverloads constructor(application: Application,
                     val job=currentCoroutineContext()
                     val result=PortraitRegion.suggest(getApplication(),original) {job.ensureActive()}
                     pendingOverlay=ImagePipeline.regionOverlay(project.manifest.width,project.manifest.height,
-                        edit.copy(local=edit.local.copy(region=result)))
+                        edit.withActiveLocal(edit.activeLocal.copy(region=result)))
                     result
                 }}
                 mutable.value=mutable.value.copy(suggestion=region,suggestionOverlay=pendingOverlay,
@@ -300,7 +328,7 @@ class EditorViewModel @JvmOverloads constructor(application: Application,
         val region=state.suggestion ?: return
         val edit=state.draft ?: return
         dismissSuggestion()
-        updateDraft(edit.copy(local=edit.local.copy(region=region)))
+        updateDraft(edit.withActiveLocal(edit.activeLocal.copy(region=region)))
         localCheckpoint()
         mutable.value=mutable.value.copy(showRegion=true,regionMode=RegionMode.ERASE,
             retouchStep=RetouchStep.REGION,
@@ -317,10 +345,11 @@ class EditorViewModel @JvmOverloads constructor(application: Application,
         if(mutable.value.busy || mutable.value.tool==null || mutable.value.comparing) return
         val project=mutable.value.project ?: return
         edit.validate(project.manifest.width,project.manifest.height)
+        ProjectIO.validateLocalResources(edit)
         val previous=mutable.value
         mutable.value=previous.copy(draft=edit,comparing=false)
         val keepDetail=previous.detail!=null && previous.tool==EditorTool.LOCAL &&
-            previous.draft?.copy(local=edit.local)==edit
+            previous.draft?.copy(local=edit.local,regions=edit.regions,selectedRegionId=edit.selectedRegionId)==edit
         if(keepDetail) {
             detailJob?.cancel();detailGeneration++;detailEdit=edit
             mutable.value=mutable.value.copy(detail=previous.detail!!.copy(bitmap=null,regionOverlay=null,
@@ -370,7 +399,7 @@ class EditorViewModel @JvmOverloads constructor(application: Application,
         val original=source ?: return
         var parameters=temporary ?: state.draft ?: project.manifest.edit
         if (state.tool==EditorTool.CROP) parameters=parameters.copy(crop=null)
-        if (state.comparing) parameters=Look.NEUTRAL.apply(parameters).copy(local=LocalAdjustment())
+        if (state.comparing) parameters=Look.NEUTRAL.apply(parameters).withoutLocalEffects()
         val ticket=++generation
         mutable.value=mutable.value.copy(rendering=true,regionOverlay=null)
         renderJob=viewModelScope.launch {
@@ -441,7 +470,7 @@ class EditorViewModel @JvmOverloads constructor(application: Application,
         val project=mutable.value.project ?: return
         var edit=detailEdit ?: return
         val local=mutable.value.tool==EditorTool.LOCAL && !d.comparing
-        if(d.comparing) edit=Look.NEUTRAL.apply(edit).copy(local=LocalAdjustment())
+        if(d.comparing) edit=Look.NEUTRAL.apply(edit).withoutLocalEffects()
         detailJob?.cancel()
         val ticket=++detailGeneration
         mutable.value=mutable.value.copy(detail=d.copy(loading=true,bitmap=null,regionOverlay=null,error=null))

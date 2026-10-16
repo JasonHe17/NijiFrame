@@ -87,11 +87,11 @@ internal fun DetailInspector(ui: EditorUi, editor: EditorViewModel) {
                             RegionModes(ui,editor,detail=true,enabled=editable)
                             RegionVisibility(ui,editor,enabled=editable)
                             Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
-                                Text("细节区域 · ${ui.draft?.local?.region?.strokes?.size ?: 0} 笔",Modifier.weight(1f),style=MaterialTheme.typography.labelSmall)
+                                Text("细节区域 · ${ui.draft?.activeLocal?.region?.let {it.strokes.size+it.refinements.size} ?: 0} 笔",Modifier.weight(1f),style=MaterialTheme.typography.labelSmall)
                                 TextButton(onClick=editor::localUndo,enabled=editable && ui.localCanUndo) {Text("撤销笔画")}
                                 TextButton(onClick=editor::localRedo,enabled=editable && ui.localCanRedo) {Text("重做笔画")}
                             }
-                            BrushSettings(ui,editor,enabled=editable && ui.regionMode!=RegionMode.MOVE)
+                            BrushSettings(ui,editor,enabled=editable && ui.regionMode!=RegionMode.MOVE,detail=true)
                         }
                     }
                     Box(Modifier.weight(1f).fillMaxWidth().onSizeChanged {viewport=it}

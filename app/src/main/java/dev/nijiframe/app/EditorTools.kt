@@ -37,6 +37,18 @@ internal fun ToolPanel(ui: EditorUi, editor: EditorViewModel, modifier: Modifier
         Column(Modifier.padding(horizontal=16.dp,vertical=4.dp)) {
             val tool=ui.tool;val draft=ui.draft
             if(tool==null || draft==null) {
+                if(category==EditorCategory.RETOUCH) {
+                    Column {
+                        Row(Modifier.fillMaxWidth()) {
+                            ToolEntry("柔肤（实验）",Glyph.FACE,Modifier.weight(1f)) {editor.beginParameter(EditorParameter.SOFTEN)}
+                            ToolEntry("局部曝光",Glyph.SUN,Modifier.weight(1f)) {editor.beginParameter(EditorParameter.LOCAL_EXPOSURE)}
+                        }
+                        Row(Modifier.fillMaxWidth()) {
+                            ToolEntry("局部颜色",Glyph.COLOR,Modifier.weight(1f)) {editor.beginParameter(EditorParameter.LOCAL_WARMTH)}
+                            ToolEntry("编辑选区",Glyph.BRUSH,Modifier.weight(1f)) {editor.beginTool(EditorTool.LOCAL);editor.regionMode(RegionMode.MOVE)}
+                        }
+                    }
+                } else
                 Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
                     when(category) {
                         EditorCategory.ADJUST -> {
@@ -44,11 +56,7 @@ internal fun ToolPanel(ui: EditorUi, editor: EditorViewModel, modifier: Modifier
                             ToolEntry("颜色",Glyph.COLOR) {editor.beginTool(EditorTool.COLOR)}
                             ToolEntry("锐化与暗角",Glyph.SHARPEN) {editor.beginTool(EditorTool.DETAILS)}
                         }
-                        EditorCategory.RETOUCH -> {
-                            ToolEntry("柔肤（实验）",Glyph.FACE) {editor.beginParameter(EditorParameter.SOFTEN)}
-                            ToolEntry("局部曝光",Glyph.SUN) {editor.beginParameter(EditorParameter.LOCAL_EXPOSURE)}
-                            ToolEntry("编辑选区",Glyph.BRUSH) {editor.beginTool(EditorTool.LOCAL);editor.regionMode(RegionMode.MOVE)}
-                        }
+                        EditorCategory.RETOUCH -> Unit
                         EditorCategory.COMPOSITION -> {
                             ToolEntry("裁剪",Glyph.CROP) {editor.beginTool(EditorTool.CROP)}
                             ToolEntry("旋转",Glyph.ROTATE) {editor.beginTool(EditorTool.GEOMETRY)}
@@ -116,8 +124,8 @@ internal fun ToolPanel(ui: EditorUi, editor: EditorViewModel, modifier: Modifier
 }
 
 @Composable
-private fun ToolEntry(label: String,glyph: Glyph,onClick: ()->Unit) {
-    TextButton(onClick=onClick,modifier=Modifier.widthIn(min=80.dp).heightIn(min=72.dp)) {
+private fun ToolEntry(label: String,glyph: Glyph,modifier: Modifier=Modifier,onClick: ()->Unit) {
+    TextButton(onClick=onClick,modifier=modifier.widthIn(min=80.dp).heightIn(min=72.dp)) {
         Column(horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(6.dp)) {
             EditorGlyph(glyph);Text(label,style=MaterialTheme.typography.labelMedium)
         }
@@ -173,6 +181,7 @@ private fun AdjustmentPanel(ui: EditorUi,editor: EditorViewModel) {
 @Composable
 private fun LocalPanel(ui: EditorUi, editor: EditorViewModel, draft: Edit) {
     val effects=ui.retouchStep==RetouchStep.EFFECT
+    RegionPicker(ui,editor)
     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(6.dp)) {
         FilterChip(selected=!effects,onClick={editor.retouchStep(RetouchStep.REGION)},enabled=!ui.comparing,label={Text("选区与修正")})
         FilterChip(selected=effects,onClick={editor.retouchStep(RetouchStep.EFFECT)},enabled=!ui.comparing,label={Text("调整效果")})
@@ -184,7 +193,7 @@ private fun LocalPanel(ui: EditorUi, editor: EditorViewModel, draft: Edit) {
         BrushSettings(ui,editor,enabled=!ui.comparing && ui.regionMode!=RegionMode.MOVE)
         Text("先检查作用范围，再调整效果；建议失败时仍可手工涂选。",style=MaterialTheme.typography.bodySmall)
     } else {
-        Text(if(draft.local.region.isEmpty) "尚未选择区域 · 请先返回选区与修正" else "作用于当前选区 · 柔肤为实验效果",
+        Text(if(draft.activeLocal.region.isEmpty) "尚未选择区域 · 请先返回选区与修正" else "作用于当前选区 · 柔肤为实验效果",
             style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
         AdjustmentPanel(ui,editor)
     }

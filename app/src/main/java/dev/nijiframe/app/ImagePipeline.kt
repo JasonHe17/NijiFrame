@@ -167,27 +167,30 @@ object ImagePipeline {
             val parameters = floatArrayOf(edit.exposureEv, edit.saturation, edit.contrast, edit.highlights,
                 edit.shadows, edit.whites, edit.blacks, edit.warmth, edit.tint, edit.vibrance)
             val context=currentCoroutineContext()
-            val mask=if((edit.local.exposureEv!=0f || edit.local.soften!=0f) && !edit.local.region.isEmpty)
-                MaskRaster.create(edit.local.region,fullWidth,fullHeight) {context.ensureActive()} else null
+            val layers=edit.localRegions.filter {it.enabled && it.adjustment.hasEffect && !it.adjustment.region.isEmpty}
+            val masks=layers.map {RegionCoverage(it.adjustment.region,fullWidth,fullHeight) {context.ensureActive()}}
             val buffer = IntArray(width * minOf(32, height))
-            val maskStrip=if(mask!=null) ByteArray(buffer.size) else null
             val radius=(minOf(fullWidth,fullHeight)/600f).roundToInt().coerceIn(1,6)
-            val softenInput=if(mask!=null && edit.local.soften>0f) IntArray(width*minOf(32+2*radius,height)) else null
+            val softenInput=if(layers.any {it.adjustment.soften>0f}) IntArray(width*minOf(32+2*radius,height)) else null
             for (y in 0 until height step 32) {
-                currentCoroutineContext().ensureActive()
+                context.ensureActive()
                 val rows = minOf(32, height - y)
-                if(mask!=null && maskStrip!=null) {
-                    for(row in 0 until rows) for(x in 0 until width)
-                        maskStrip[row*width+x]=mask.sample((left+x+.5f)/fullWidth,(top+y+row+.5f)/fullHeight).toByte()
-                }
-                if(softenInput!=null && maskStrip!=null) {
+                val coverage=masks.map {it.window(left,top+y,width,rows)}
+                source.getPixels(buffer, 0, width, 0, y, width, rows)
+                if(softenInput!=null) {
                     val first=maxOf(0,y-radius);val last=minOf(height,y+rows+radius)
                     source.getPixels(softenInput,0,width,0,first,width,last-first)
-                    NativeTone.soften(softenInput,buffer,maskStrip,width,last-first,y-first,rows,radius,
-                        edit.local.soften,edit.local.detailProtection)
-                } else source.getPixels(buffer, 0, width, 0, y, width, rows)
+                    layers.forEachIndexed {i,layer ->
+                        context.ensureActive()
+                        if(layer.adjustment.soften>0f) NativeTone.softenMerge(softenInput,buffer,coverage[i],width,last-first,y-first,rows,radius,
+                            layer.adjustment.soften,layer.adjustment.detailProtection)
+                    }
+                }
                 NativeTone.applyBasic(buffer, width * rows, parameters)
-                if(maskStrip!=null) NativeTone.localExposure(buffer,maskStrip,width*rows,edit.local.exposureEv)
+                layers.forEachIndexed {i,layer ->
+                    val local=layer.adjustment
+                    if(local.hasColor) NativeTone.localColor(buffer,coverage[i],width*rows,local.exposureEv,local.warmth,local.tint,local.saturation)
+                }
                 output.setPixels(buffer, 0, width, 0, y, width, rows)
             }
             return output
@@ -214,9 +217,15 @@ object ImagePipeline {
 
     suspend fun regionOverlay(width: Int,height: Int,edit: Edit): Bitmap {
         val context=currentCoroutineContext()
-        val mask=MaskRaster.create(edit.local.region,width,height) {context.ensureActive()}
-        val pixels=IntArray(mask.coverage.size) { ((mask.coverage[it].toInt() and 255)*110/255 shl 24) or 0x00ff4060 }
-        val input=Bitmap.createBitmap(pixels,mask.width,mask.height,Bitmap.Config.ARGB_8888)
+        val mask=RegionCoverage(edit.activeLocal.region,width,height) {context.ensureActive()}
+        val ratio=minOf(1.0,1024.0/maxOf(width,height))
+        val mw=maxOf(1,(width*ratio).roundToInt());val mh=maxOf(1,(height*ratio).roundToInt())
+        val pixels=IntArray(mw*mh)
+        for(y in 0 until mh) {
+            context.ensureActive()
+            for(x in 0 until mw) pixels[y*mw+x]=(mask.sample((x+.5f)/mw,(y+.5f)/mh)*110/255 shl 24) or 0x00ff4060
+        }
+        val input=Bitmap.createBitmap(pixels,mw,mh,Bitmap.Config.ARGB_8888)
         val (ow,oh)=Geometry.outputSize(width,height,edit)
         val scale=minOf(1f,1600f/maxOf(ow,oh))
         val output=Bitmap.createBitmap(maxOf(1,(ow*scale).toInt()),maxOf(1,(oh*scale).toInt()),Bitmap.Config.ARGB_8888)
@@ -224,7 +233,7 @@ object ImagePipeline {
         val points=listOf(MaskPoint(0f,0f),MaskPoint(1f,0f),MaskPoint(0f,1f)).map(mapping::toOutput)
         val target=floatArrayOf(points[0].x*output.width/ow,points[0].y*output.height/oh,
             points[1].x*output.width/ow,points[1].y*output.height/oh,points[2].x*output.width/ow,points[2].y*output.height/oh)
-        val matrix=Matrix().apply {setPolyToPoly(floatArrayOf(0f,0f,mask.width.toFloat(),0f,0f,mask.height.toFloat()),0,target,0,3)}
+        val matrix=Matrix().apply {setPolyToPoly(floatArrayOf(0f,0f,mw.toFloat(),0f,0f,mh.toFloat()),0,target,0,3)}
         try {Canvas(output).drawBitmap(input,matrix,Paint(Paint.FILTER_BITMAP_FLAG))} finally {input.recycle()}
         return output
     }

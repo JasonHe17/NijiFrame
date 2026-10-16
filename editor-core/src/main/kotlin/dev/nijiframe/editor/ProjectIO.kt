@@ -20,6 +20,10 @@ object ProjectIO {
     private val allowed = setOf("project.json", "assets/original", "assets/local-mask.json")
     private const val MAX_MANIFEST_BYTES = 16 * 1024
     private val json = Json { encodeDefaults = true; ignoreUnknownKeys = false }
+    fun validateLocalResources(edit: Edit) {
+        val masks=LocalMasks(edit.local.region,edit.regions.filterNot {it.adjustment.region.isEmpty}.associate {it.id to it.adjustment.region})
+        require(json.encodeToString(masks).encodeToByteArray().size<=MAX_MASK_BYTES) { "选区资源达到上限，请减少区域或笔画" }
+    }
     fun digest(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256")
         .digest(bytes).joinToString("") { "%02x".format(it) }
 
@@ -159,15 +163,21 @@ object ProjectIO {
         require(original.size == manifest.sourceBytes && digest(original) == manifest.sourceSha256) { "Source integrity check failed" }
         val resource=manifest.localMask
         require((resource != null) == entries.containsKey("assets/local-mask.json")) { "Missing or unexpected mask" }
-        val region=if(resource==null) Region() else {
+        val masks=if(resource==null) LocalMasks() else {
             val bytes=entries.getValue(resource.path)
             require(bytes.size==resource.bytes && digest(bytes)==resource.sha256) { "Mask integrity check failed" }
-            json.decodeFromString<Region>(bytes.decodeToString(throwOnInvalidSequence=true)).also { it.validate() }
+            val text=bytes.decodeToString(throwOnInvalidSequence=true)
+            if(manifest.version<7) LocalMasks(legacy=json.decodeFromString<Region>(text))
+            else json.decodeFromString<LocalMasks>(text)
         }
-        require(manifest.version >= 5 || region.base == null) { "Legacy project cannot contain base coverage" }
-        region.validateWork(manifest.width,manifest.height)
-        val current=manifest.current()
-        return Project(current.copy(localMask=null,edit=current.edit.copy(local=current.edit.local.copy(region=region))), original)
+        require(masks.regions.keys.all {id->manifest.edit.regions.any {it.id==id}}) { "Unexpected region coverage" }
+        require(manifest.edit.regions.isEmpty() || masks.legacy.isEmpty) { "Ambiguous coverage" }
+        val edit=manifest.edit.copy(local=manifest.edit.local.copy(region=masks.legacy),regions=manifest.edit.regions.map {
+            it.copy(adjustment=it.adjustment.copy(region=masks.regions[it.id] ?: Region()))
+        })
+        val restored=manifest.copy(edit=edit,localMask=null)
+        restored.validate()
+        return Project(restored.current(), original)
     }
 
     // Version 1 deliberately excludes comments, ZIP64, encryption and special files.
@@ -218,8 +228,10 @@ object ProjectIO {
         project.manifest.validate()
         require(project.original.size == project.manifest.sourceBytes &&
             digest(project.original) == project.manifest.sourceSha256) { "Source integrity check failed" }
-        val region=project.manifest.edit.local.region
-        val mask=if(region.isEmpty) null else json.encodeToString(region).encodeToByteArray()
+        val edit=project.manifest.edit
+        val masks=LocalMasks(edit.local.region,edit.regions.filterNot {it.adjustment.region.isEmpty}.associate {it.id to it.adjustment.region})
+        val mask=if(masks.legacy.isEmpty && masks.regions.isEmpty()) null else
+            (if(project.manifest.version<7) json.encodeToString(masks.legacy) else json.encodeToString(masks)).encodeToByteArray()
         require(mask==null || mask.size<=MAX_MASK_BYTES) { "Mask exceeds size limit" }
         val manifest=project.manifest.copy(localMask=mask?.let { MaskResource(bytes=it.size,sha256=digest(it)) })
         manifest.validate()
