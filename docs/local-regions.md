@@ -2,9 +2,11 @@
 
 Each region stores a stable identifier, a name, an effect switch, source-coordinate
 coverage and exposure, relative warmth/tint, saturation, softening and protection.
-Regions compose in creation order; selection never reorders them. Empty or disabled
-regions leave pixels unchanged. The first implementation has a bounded region
-count, to be confirmed against measured rendering and memory costs before delivery.
+Regions compose in creation order; selection never reorders them or consumes an
+edit undo step. Empty or disabled regions leave pixels unchanged. The cap is four
+regions: a local synthetic 1/4/8-region comparison found that eight approximately
+doubled four-region processing time, while four covers a three-region workflow
+with one spare slot. These are emulator observations, not physical-phone budgets.
 
 The processing order is source softening, global color, then each region's local
 color, followed by geometry, sharpening and vignette. Each softening candidate

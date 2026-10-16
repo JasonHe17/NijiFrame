@@ -61,6 +61,17 @@ class LocalRegionsTest {
         assertEquals(Edit(),original.deleteActiveRegion())
         assertTrue(selected.withoutLocalEffects().localRegions.all {!it.adjustment.hasEffect})
     }
+    @Test fun selectingARegionDoesNotConsumeUndoOrDiscardRedo() {
+        val initial=Edit(local=first).addRegion("second","第二区")
+        val history=History(initial)
+        history.commit(initial.selectRegion("legacy"))
+        assertFalse(history.canUndo)
+        history.commit(history.current.withActiveLocal(first.copy(warmth=.3f)))
+        history.undo();assertTrue(history.canRedo)
+        history.commit(history.current.selectRegion("second"))
+        assertTrue(history.canRedo);assertFalse(history.canUndo)
+        assertEquals(.3f,history.redo().regions.first().adjustment.warmth,0f)
+    }
     @Test fun v7ArchiveRestoresEveryMaskAndSelectionWithoutChangingOriginal() {
         val fine=Region(refinements=listOf(MaskStroke(listOf(MaskPoint(.501f,.503f)),.0001f,.6f)))
         val edit=Edit(local=first).addRegion("clothes","衣服").withActiveLocal(LocalAdjustment(region=fine,warmth=.2f))

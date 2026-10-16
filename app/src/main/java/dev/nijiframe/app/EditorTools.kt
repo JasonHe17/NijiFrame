@@ -48,20 +48,21 @@ internal fun ToolPanel(ui: EditorUi, editor: EditorViewModel, modifier: Modifier
                             ToolEntry("编辑选区",Glyph.BRUSH,Modifier.weight(1f)) {editor.beginTool(EditorTool.LOCAL);editor.regionMode(RegionMode.MOVE)}
                         }
                     }
-                } else
-                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
-                    when(category) {
-                        EditorCategory.ADJUST -> {
-                            ToolEntry("明暗",Glyph.SUN) {editor.beginTool(EditorTool.LIGHT)}
-                            ToolEntry("颜色",Glyph.COLOR) {editor.beginTool(EditorTool.COLOR)}
-                            ToolEntry("锐化与暗角",Glyph.SHARPEN) {editor.beginTool(EditorTool.DETAILS)}
+                } else {
+                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
+                        when(category) {
+                            EditorCategory.ADJUST -> {
+                                ToolEntry("明暗",Glyph.SUN) {editor.beginTool(EditorTool.LIGHT)}
+                                ToolEntry("颜色",Glyph.COLOR) {editor.beginTool(EditorTool.COLOR)}
+                                ToolEntry("锐化与暗角",Glyph.SHARPEN) {editor.beginTool(EditorTool.DETAILS)}
+                            }
+                            EditorCategory.RETOUCH -> Unit
+                            EditorCategory.COMPOSITION -> {
+                                ToolEntry("裁剪",Glyph.CROP) {editor.beginTool(EditorTool.CROP)}
+                                ToolEntry("旋转",Glyph.ROTATE) {editor.beginTool(EditorTool.GEOMETRY)}
+                            }
+                            EditorCategory.PRESETS -> ToolEntry("选择预设",Glyph.PRESET) {editor.beginTool(EditorTool.LOOKS)}
                         }
-                        EditorCategory.RETOUCH -> Unit
-                        EditorCategory.COMPOSITION -> {
-                            ToolEntry("裁剪",Glyph.CROP) {editor.beginTool(EditorTool.CROP)}
-                            ToolEntry("旋转",Glyph.ROTATE) {editor.beginTool(EditorTool.GEOMETRY)}
-                        }
-                        EditorCategory.PRESETS -> ToolEntry("选择预设",Glyph.PRESET) {editor.beginTool(EditorTool.LOOKS)}
                     }
                 }
                 Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.SpaceBetween) {

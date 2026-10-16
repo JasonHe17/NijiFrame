@@ -68,9 +68,22 @@ class LocalRegionsUiTest {
             tap("切换选区");tap("选择选区 脸部");settled();tap("管理选区");tap("启用选区效果");tap("关闭");settled()
             assertFalse(model.ui.value.draft!!.regions[0].enabled)
             tap("撤销");await {model.ui.value.draft!!.regions[0].enabled};settled()
+            assertEquals(completed.regions[0].id,model.ui.value.draft!!.selectedRegionId)
+            tap("管理选区");tap("复位本区效果");tap("关闭")
+            await {model.ui.value.draft!!.activeLocal.warmth==0f};settled()
+            assertEquals(completed.regions[1],model.ui.value.draft!!.regions[1])
+            assertEquals(completed.regions[2],model.ui.value.draft!!.regions[2])
+            tap("撤销");await {model.ui.value.draft!!.activeLocal.warmth==.35f};settled()
+            tap("管理选区");tap("删除选区");await {model.ui.value.draft!!.regions.size==2};settled()
+            tap("撤销");await {model.ui.value.draft!!.regions.size==3};settled()
+            assertEquals(completed.regions,model.ui.value.draft!!.regions)
+            tap("新增选区");await {model.ui.value.draft!!.regions.size==4};settled()
+            assertFalse("Region cap is visible without attempting a failing edit",node("新增选区")!!.isEnabled)
+            tap("管理选区");tap("删除选区");await {model.ui.value.draft!!.regions.size==3};settled()
             tap("取消调整");settled();assertEquals(Edit(),library.read(id).manifest.edit)
             // A cancelled session never persists any region. Start a second real session.
-            tap("修饰");tap("编辑选区");settled();rename("衣服");paint(.5f);exact("局部色调","20");settled()
+            tap("修饰");tap("编辑选区");settled();rename("脸部");paint(.2f);exact("局部色温","35");settled()
+            tap("新增选区");settled();rename("衣服");paint(.5f);exact("局部色调","20");settled()
             tap("新增选区");settled();rename("背景");paint(.8f);exact("局部曝光","-0.5");settled()
             val applied=model.ui.value.draft!!
             tap("应用调整");settled();await {library.read(id).manifest.edit==applied}

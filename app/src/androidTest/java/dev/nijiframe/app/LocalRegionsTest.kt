@@ -131,7 +131,13 @@ class LocalRegionsTest {
             main {model.cancelTool()};settled()
             assertTrue(repository.library.read(id).manifest.edit.regions.isEmpty())
             main {model.beginTool(EditorTool.LOCAL);model.updateDraft(Edit(regions=layers(),selectedRegionId="face"));model.localCheckpoint()};settled()
-            main {model.selectRegion("clothes");model.renameRegion("服饰");model.enableRegion(false)};settled()
+            main {
+                val session=model.ui.value.toolSession
+                model.selectRegion("clothes")
+                model.setParameter(EditorParameter.LOCAL_WARMTH,90f,session)
+                assertEquals(layers()[1].adjustment,model.ui.value.draft!!.activeLocal)
+                model.renameRegion("服饰");model.enableRegion(false)
+            };settled()
             val before=model.ui.value.draft!!
             main {model.resetRegionEffects()};settled()
             assertEquals(before.regions[0],model.ui.value.draft!!.regions[0]);assertEquals(before.regions[2],model.ui.value.draft!!.regions[2])

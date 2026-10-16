@@ -188,7 +188,7 @@ class EditorViewModel @JvmOverloads constructor(application: Application,
         // Navigation must resolve the existing session explicitly before replacing it.
         if (mutable.value.tool!=null) return
         val edit=mutable.value.project?.manifest?.edit ?: return
-        localHistory=History(edit)
+        localHistory=History(edit.copy(selectedRegionId=null))
         drawingMode=RegionMode.ADD
         mutable.value=mutable.value.copy(tool=tool,draft=edit,toolSession=mutable.value.toolSession+1,
             selectedParameter=null,
@@ -238,7 +238,6 @@ class EditorViewModel @JvmOverloads constructor(application: Application,
         if(state.tool!=EditorTool.LOCAL || state.busy || state.comparing || state.suggestion!=null) return
         localCheckpoint()
         state.draft?.let {updateDraft(it.selectRegion(id))}
-        mutable.value=mutable.value.copy(toolSession=mutable.value.toolSession+1)
     }
     fun renameRegion(name: String)=regionChange {it.changeActiveRegion {r -> r.copy(name=name.trim())}}
     fun enableRegion(enabled: Boolean)=regionChange {it.changeActiveRegion {r -> r.copy(enabled=enabled)}}
@@ -247,20 +246,25 @@ class EditorViewModel @JvmOverloads constructor(application: Application,
     fun localCheckpoint() {
         if(mutable.value.busy || mutable.value.comparing) return
         val edit=mutable.value.draft ?: return
-        localHistory.commit(edit)
+        // Selection is navigation, not an image-edit undo step.
+        localHistory.commit(edit.copy(selectedRegionId=null))
         mutable.value=mutable.value.copy(localCanUndo=localHistory.canUndo,localCanRedo=localHistory.canRedo)
     }
     fun localUndo() {
         if(mutable.value.busy || mutable.value.tool==null || mutable.value.comparing) return
-        updateDraft(localHistory.undo())
+        restoreLocalSnapshot(localHistory.undo())
         mutable.value=mutable.value.copy(localCanUndo=localHistory.canUndo,localCanRedo=localHistory.canRedo)
     }
     fun localRedo() {
         if(mutable.value.busy || mutable.value.tool==null || mutable.value.comparing) return
-        updateDraft(localHistory.redo())
+        restoreLocalSnapshot(localHistory.redo())
         mutable.value=mutable.value.copy(localCanUndo=localHistory.canUndo,localCanRedo=localHistory.canRedo)
     }
     fun addStroke(points: List<MaskPoint>) = addStroke(points,false)
+    private fun restoreLocalSnapshot(edit: Edit) {
+        val selected=mutable.value.draft?.selectedRegionId
+        updateDraft(edit.copy(selectedRegionId=selected?.takeIf {id->edit.regions.any {it.id==id}} ?: edit.regions.firstOrNull()?.id))
+    }
     private fun addStroke(points: List<MaskPoint>, precise: Boolean) {
         val state=mutable.value;val edit=state.draft ?: return
         if(state.busy || state.comparing || state.regionMode==RegionMode.MOVE || state.tool!=EditorTool.LOCAL || points.isEmpty()) return
@@ -327,8 +331,17 @@ class EditorViewModel @JvmOverloads constructor(application: Application,
         val state=mutable.value
         val region=state.suggestion ?: return
         val edit=state.draft ?: return
+        val proposed=edit.withActiveLocal(edit.activeLocal.copy(region=region))
+        try {
+            proposed.validate(state.project!!.manifest.width,state.project.manifest.height)
+            ProjectIO.validateLocalResources(proposed)
+        } catch(error: IllegalArgumentException) {
+            dismissSuggestion()
+            mutable.value=mutable.value.copy(error="选区资源达到上限，未替换当前区域；请减少区域或笔画")
+            return
+        }
         dismissSuggestion()
-        updateDraft(edit.withActiveLocal(edit.activeLocal.copy(region=region)))
+        updateDraft(proposed)
         localCheckpoint()
         mutable.value=mutable.value.copy(showRegion=true,regionMode=RegionMode.ERASE,
             retouchStep=RetouchStep.REGION,
@@ -347,7 +360,8 @@ class EditorViewModel @JvmOverloads constructor(application: Application,
         edit.validate(project.manifest.width,project.manifest.height)
         ProjectIO.validateLocalResources(edit)
         val previous=mutable.value
-        mutable.value=previous.copy(draft=edit,comparing=false)
+        val changedTarget=previous.draft?.activeRegionId!=edit.activeRegionId
+        mutable.value=previous.copy(draft=edit,comparing=false,toolSession=previous.toolSession+if(changedTarget) 1 else 0)
         val keepDetail=previous.detail!=null && previous.tool==EditorTool.LOCAL &&
             previous.draft?.copy(local=edit.local,regions=edit.regions,selectedRegionId=edit.selectedRegionId)==edit
         if(keepDetail) {
@@ -377,6 +391,7 @@ class EditorViewModel @JvmOverloads constructor(application: Application,
         if (mutable.value.busy) return
         val project=mutable.value.project ?: return
         edit.validate(project.manifest.width,project.manifest.height)
+        ProjectIO.validateLocalResources(edit)
         history.commit(edit);publishEdit(history.current)
     }
     fun undo() { if (!mutable.value.busy && mutable.value.tool==null) publishEdit(history.undo()) }

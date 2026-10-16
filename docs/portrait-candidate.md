@@ -19,3 +19,5 @@ Research comparisons use separately licensed images outside this repository. Aut
 A daily-use phone should be used only for short ordinary editing trials with copied inputs. Run malformed-input, stress and automated reinstall tests on dedicated environments. See [manual checks](manual-check.md).
 
 The optional [portrait region suggestion](portrait-regions.md) now provides a geometric starting selection. This does not change the experimental softening algorithm or constitute aesthetic acceptance. Its model, limitations and independent schema v5 are documented separately.
+
+V7 allows separate named regions and precise source-pixel erase corrections to protect small details without changing legacy strokes. Each region keeps independent softening and protection settings. The candidate remains off by default and experimental; automatic contrast protection is not semantic recognition of makeup or facial features. Local engineering measurements and anonymous review preparation do not by themselves establish aesthetic acceptance.

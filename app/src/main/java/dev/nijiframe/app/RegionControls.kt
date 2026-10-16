@@ -4,6 +4,7 @@ package dev.nijiframe.app
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -11,6 +12,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -26,15 +29,21 @@ internal fun RegionPicker(ui: EditorUi, editor: EditorViewModel) {
     var choose by remember {mutableStateOf(false)}
     Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
         Box(Modifier.weight(1f)) {
-            TextButton(onClick={choose=true},enabled=enabled,modifier=Modifier.semantics {contentDescription="切换选区"}) {
-                Text("${active.name} · ${regions.indexOf(active)+1}/${regions.size}",maxLines=1,
+            TextButton(onClick={choose=true},enabled=enabled,modifier=Modifier.semantics {
+                contentDescription="切换选区"
+                stateDescription="${active.name}，第 ${regions.indexOf(active)+1} 个，共 ${regions.size} 个，"+if(active.enabled) "效果已启用" else "效果已关闭"
+            }) {
+                Text("${active.name} · ${regions.indexOf(active)+1}/${regions.size}"+if(active.enabled) "" else " · 已关闭",maxLines=1,
                     overflow=androidx.compose.ui.text.style.TextOverflow.Ellipsis)
             }
             DropdownMenu(expanded=choose,onDismissRequest={choose=false}) {
                 regions.forEach {r ->
                     DropdownMenuItem(text={Text(r.name+if(r.enabled) "" else " · 已关闭")},
                         onClick={choose=false;editor.selectRegion(r.id)},
-                        modifier=Modifier.semantics {contentDescription="选择选区 ${r.name}"})
+                        modifier=Modifier.semantics {
+                            contentDescription="选择选区 ${r.name}";selected=r.id==active.id
+                            stateDescription=if(r.enabled) "效果已启用" else "效果已关闭"
+                        })
                 }
             }
         }
@@ -43,8 +52,8 @@ internal fun RegionPicker(ui: EditorUi, editor: EditorViewModel) {
     }
     if(manage) {
         var name by remember(active.id) {mutableStateOf(active.name)}
-        AlertDialog(onDismissRequest={manage=false},title={Text("管理当前选区")},text={
-            Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
+        AlertDialog(onDismissRequest={manage=false},title={Text("管理选区 · ${active.name}")},text={
+            Column(Modifier.verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(value=name,onValueChange={name=it.take(40)},label={Text("选区名称")},singleLine=true)
                 Row(verticalAlignment=Alignment.CenterVertically) {
                     Checkbox(checked=active.enabled,onCheckedChange=editor::enableRegion,

@@ -16,6 +16,7 @@ data class Edit(val exposureEv: Float = 0f, val saturation: Float = 1f,
                 val flipHorizontal: Boolean = false, val flipVertical: Boolean = false,
                 val straighten: Float = 0f, val local: LocalAdjustment = LocalAdjustment(),
                 val regions: List<LocalRegion> = emptyList(), val selectedRegionId: String? = null) {
+    val activeRegionId: String get()=selectedRegionId ?: regions.firstOrNull()?.id ?: "legacy"
     val activeLocal: LocalAdjustment get()=regions.firstOrNull {it.id==selectedRegionId}?.adjustment ?: regions.firstOrNull()?.adjustment ?: local
     val localRegions: List<LocalRegion> get()=regions.ifEmpty {listOf(LocalRegion("legacy","区域 1",local))}
     fun withActiveLocal(value: LocalAdjustment): Edit = if(regions.isEmpty()) copy(local=value) else
@@ -129,6 +130,7 @@ class History(initial: Edit = Edit()) {
     val canRedo get() = future.isNotEmpty()
     fun commit(edit: Edit) {
         if (edit == current) return
+        if(edit.copy(selectedRegionId=current.selectedRegionId)==current) {current=edit;return}
         past.addLast(current)
         if (past.size > 100) past.removeFirst()
         current = edit
