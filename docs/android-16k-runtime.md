@@ -81,6 +81,15 @@ on corrected-kernel API35/16KiB, with zero failures or skips. A startup
 `DeadSystemException` during an intentional framework restart is retained
 separately; it preceded the application suite and is not an application SIGSEGV.
 
+The first [corrected-kernel CI run 38927997853](https://github.com/JasonHe17/NijiFrame/actions/runs/38927997853)
+completed all 54 tests with one UI locator failure after returning from the
+sharesheet; its collected log contains no native fatal signal or Java fatal
+exception. The editor had returned, but the test had already chosen a literal
+text selector while the description-only project icon was still absent. The
+locator now polls both descriptions and text under the same ten-second limit;
+the single Back action and project/pixel assertions are unchanged. This test
+synchronization defect is tracked separately from the kernel problem.
+
 The [workflow](../.github/workflows/android.yml) and
 [preparation helper](../scripts/prepare-test-emulator.py) encode the fix and its
 checks. Current test outcomes and outstanding items belong in the delivery

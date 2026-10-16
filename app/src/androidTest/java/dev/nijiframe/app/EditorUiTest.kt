@@ -26,8 +26,18 @@ class EditorUiTest {
     private val device=UiDevice.getInstance(instrumentation)
     private fun freshTree() { if(android.os.Build.VERSION.SDK_INT>=34) instrumentation.uiAutomation.clearCache() }
     private fun text(value: String): UiObject {
-        freshTree()
-        return (device.findObject(UiSelector().description(value)).takeIf {it.exists()} ?: device.findObject(UiSelector().text(value))).also {check(it.waitForExists(10_000)) {"Missing UI text: $value"} }
+        val deadline=System.currentTimeMillis()+10_000
+        do {
+            freshTree()
+            // During a window transition neither locator may exist yet. Recheck
+            // both instead of committing to text before a description-only icon returns.
+            val described=device.findObject(UiSelector().description(value))
+            if(described.exists()) return described
+            val labelled=device.findObject(UiSelector().text(value))
+            if(labelled.exists()) return labelled
+            Thread.sleep(80)
+        } while(System.currentTimeMillis()<deadline)
+        error("Missing UI text or description: $value")
     }
     private fun tap(value: String) {text(value).click();device.waitForIdle();freshTree()}
     private fun description(value: String): UiObject {
