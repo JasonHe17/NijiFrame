@@ -1,12 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 package dev.nijiframe.app
 
-import androidx.compose.foundation.systemGestureExclusion
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -23,13 +21,11 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import dev.nijiframe.editor.*
@@ -40,11 +36,19 @@ import kotlin.math.roundToInt
 internal fun DetailInspector(ui: EditorUi, editor: EditorViewModel) {
     val detail=ui.detail ?: return
     val local=ui.tool==EditorTool.LOCAL
+    var viewport by remember {mutableStateOf(IntSize.Zero)}
+    // Request pixels from the laid-out canvas, outside BoxWithConstraints' measurement
+    // subcomposition. Publishing a rendered frame must not start another measurement request.
+    LaunchedEffect(viewport,detail.center,detail.comparing,detail.revision) {
+        if(viewport.width>0 && viewport.height>0)
+            editor.loadDetail(viewport.width.coerceAtMost(DetailRenderer.MAX_EDGE),
+                viewport.height.coerceAtMost(DetailRenderer.MAX_EDGE))
+    }
     Dialog(onDismissRequest=editor::closeDetail,properties=DialogProperties(usePlatformDefaultWidth=false)) {
         Surface(Modifier.fillMaxSize()) {
             BoxWithConstraints(Modifier.fillMaxSize().systemBarsPadding()) {
                 val compact=maxHeight<600.dp
-                val controlsLimit=if(compact) maxHeight*.45f else Dp.Infinity
+                val controlsLimit=maxHeight*(if(compact) .45f else .52f)
                 Column(Modifier.fillMaxSize().padding(12.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
                     Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
                         Text("100% 细节",Modifier.weight(1f),style=MaterialTheme.typography.titleMedium)
@@ -52,14 +56,15 @@ internal fun DetailInspector(ui: EditorUi, editor: EditorViewModel) {
                         TextButton(onClick=editor::closeDetail) {Text("关闭细节")}
                     }
                     // Keep a usable image window on short/landscape displays; controls remain scrollable.
-                    Column(Modifier.fillMaxWidth().heightIn(max=controlsLimit).verticalScroll(rememberScrollState()),
+                    Column(Modifier.fillMaxWidth().heightIn(max=controlsLimit).verticalScroll(rememberScrollState())
+                        .semantics {contentDescription="细节控制"},
                         verticalArrangement=Arrangement.spacedBy(8.dp)) {
                         Text("点击概览选择位置；下方按原尺寸显示。",style=MaterialTheme.typography.bodySmall)
                         var overviewSize by remember {mutableStateOf(IntSize.Zero)}
                         val ratio=min(overviewSize.width.toFloat()/detail.outputWidth,overviewSize.height.toFloat()/detail.outputHeight)
                         val pictureWidth=detail.outputWidth*ratio;val pictureHeight=detail.outputHeight*ratio
                         val left=(overviewSize.width-pictureWidth)/2;val top=(overviewSize.height-pictureHeight)/2
-                        Canvas(Modifier.fillMaxWidth().height(132.dp).background(Color(0xff17181b))
+                        Canvas(Modifier.fillMaxWidth().height(132.dp).background(LocalEditorCanvas.current)
                             .onSizeChanged {overviewSize=it}.semantics {contentDescription="选择细节区域"}
                             .pointerInput(overviewSize,detail.outputWidth,detail.outputHeight) {
                                 detectTapGestures {point ->
@@ -78,30 +83,19 @@ internal fun DetailInspector(ui: EditorUi, editor: EditorViewModel) {
                         }
                         Text(if(detail.comparing) "原图细节 · 保持当前构图" else "调整后细节",style=MaterialTheme.typography.labelMedium)
                         if(local) {
-                            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),verticalAlignment=Alignment.CenterVertically) {
-                                FilterChip(selected=ui.regionMode==RegionMode.ADD,onClick={editor.regionMode(RegionMode.ADD)},label={Text("细节添加")})
-                                FilterChip(selected=ui.regionMode==RegionMode.ERASE,onClick={editor.regionMode(RegionMode.ERASE)},label={Text("细节擦除")})
-                                TextButton(onClick={editor.showRegion(!ui.showRegion)}) {Text(if(ui.showRegion) "隐藏覆盖" else "显示覆盖")}
-                            }
+                            val editable=!detail.comparing && !ui.busy
+                            RegionModes(ui,editor,detail=true,enabled=editable)
+                            RegionVisibility(ui,editor,enabled=editable)
                             Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
                                 Text("细节区域 · ${ui.draft?.local?.region?.strokes?.size ?: 0} 笔",Modifier.weight(1f),style=MaterialTheme.typography.labelSmall)
-                                TextButton(onClick=editor::localUndo,enabled=ui.localCanUndo && !ui.busy) {Text("撤销笔画")}
-                                TextButton(onClick=editor::localRedo,enabled=ui.localCanRedo && !ui.busy) {Text("重做笔画")}
+                                TextButton(onClick=editor::localUndo,enabled=editable && ui.localCanUndo) {Text("撤销笔画")}
+                                TextButton(onClick=editor::localRedo,enabled=editable && ui.localCanRedo) {Text("重做笔画")}
                             }
-                            Row(verticalAlignment=Alignment.CenterVertically) {
-                                val manifest=requireNotNull(ui.project).manifest
-                                Text("半径 ${(ui.brushRadius*min(manifest.width,manifest.height)).roundToInt()} 原图像素",style=MaterialTheme.typography.labelSmall)
-                                Slider(value=ui.brushRadius,onValueChange=editor::brushRadius,valueRange=.005f.. .25f,
-                                    modifier=Modifier.weight(1f).systemGestureExclusion().semantics {contentDescription="细节笔刷半径"})
-                            }
+                            BrushSettings(ui,editor,enabled=editable && ui.regionMode!=RegionMode.MOVE)
                         }
                     }
-                    BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().clipToBounds().background(Color(0xff101114)),
-                        contentAlignment=Alignment.Center) {
-                        val density=LocalDensity.current
-                        val width=with(density) {maxWidth.roundToPx()}.coerceIn(1,DetailRenderer.MAX_EDGE)
-                        val height=with(density) {maxHeight.roundToPx()}.coerceIn(1,DetailRenderer.MAX_EDGE)
-                        LaunchedEffect(width,height,detail.center,detail.comparing,detail.revision) {editor.loadDetail(width,height)}
+                    Box(Modifier.weight(1f).fillMaxWidth().onSizeChanged {viewport=it}
+                        .clipToBounds().background(LocalEditorCanvas.current),contentAlignment=Alignment.Center) {
                         detail.bitmap?.let {Image(it.asImageBitmap(),"原尺寸细节图",Modifier.fillMaxSize(),contentScale=ContentScale.None)}
                         if(local && !detail.comparing && detail.bitmap!=null && !detail.loading) {
                             if(ui.showRegion) detail.regionOverlay?.let {
@@ -110,7 +104,7 @@ internal fun DetailInspector(ui: EditorUi, editor: EditorViewModel) {
                             if(!ui.busy && ui.regionMode!=RegionMode.MOVE) DetailRegionInput(ui,editor)
                         }
                         if(detail.loading) CircularProgressIndicator()
-                        detail.error?.let {Text(it,Modifier.padding(16.dp),color=Color.White)}
+                        detail.error?.let {Text(it,Modifier.padding(16.dp),color=MaterialTheme.colorScheme.error)}
                     }
                     Text(if(compact && local) "1:1 显示 · 修改草稿，关闭后应用或取消"
                         else if(local) "1 个图像像素对应 1 个屏幕像素。涂抹修改当前草稿；关闭后应用或取消调整。原图对比时不能涂抹。"

@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 package dev.nijiframe.app
 
-import androidx.compose.foundation.systemGestureExclusion
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -13,84 +12,103 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import dev.nijiframe.editor.*
-import java.util.Locale
 
-private enum class Adjustment(val label: String, val range: ClosedFloatingPointRange<Float>) {
-    EXPOSURE("曝光",-3f..3f), CONTRAST("对比度",-1f..1f), HIGHLIGHTS("高光",-1f..1f), SHADOWS("阴影",-1f..1f),
-    WHITES("白色",-1f..1f), BLACKS("黑色",-1f..1f), SATURATION("饱和度",0f..2f), VIBRANCE("鲜艳度",-1f..1f),
-    WARMTH("色温",-1f..1f), TINT("色调",-1f..1f), SHARPEN("锐化",0f..2f), VIGNETTE("暗角",-1f..1f);
-    fun get(e: Edit): Float = when(this) {
-        EXPOSURE->e.exposureEv;CONTRAST->e.contrast;HIGHLIGHTS->e.highlights;SHADOWS->e.shadows;
-        WHITES->e.whites;BLACKS->e.blacks;SATURATION->e.saturation;VIBRANCE->e.vibrance;
-        WARMTH->e.warmth;TINT->e.tint;SHARPEN->e.sharpen;VIGNETTE->e.vignette
-    }
-    fun set(e: Edit,v: Float): Edit = when(this) {
-        EXPOSURE->e.copy(exposureEv=v);CONTRAST->e.copy(contrast=v);HIGHLIGHTS->e.copy(highlights=v);SHADOWS->e.copy(shadows=v);
-        WHITES->e.copy(whites=v);BLACKS->e.copy(blacks=v);SATURATION->e.copy(saturation=v);VIBRANCE->e.copy(vibrance=v);
-        WARMTH->e.copy(warmth=v);TINT->e.copy(tint=v);SHARPEN->e.copy(sharpen=v);VIGNETTE->e.copy(vignette=v)
+internal enum class EditorCategory(val label: String) {
+    ADJUST("调整"), RETOUCH("修饰"), COMPOSITION("构图"), PRESETS("预设");
+    companion object {
+        fun of(tool: EditorTool)=when(tool) {
+            EditorTool.LOCAL->RETOUCH
+            EditorTool.CROP,EditorTool.GEOMETRY->COMPOSITION
+            EditorTool.LOOKS->PRESETS
+            else->ADJUST
+        }
     }
 }
 
 @Composable
 internal fun ToolPanel(ui: EditorUi, editor: EditorViewModel, modifier: Modifier=Modifier) {
-    Surface(modifier,tonalElevation=3.dp) {
-        Column(Modifier.padding(8.dp),verticalArrangement=Arrangement.spacedBy(4.dp)) {
-            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(6.dp)) {
-                EditorTool.entries.forEach { tool ->
-                    FilterChip(selected=ui.tool==tool,onClick={editor.beginTool(tool)},enabled=!ui.busy,label={Text(tool.label)})
-                }
-            }
+    var category by rememberSaveable {mutableStateOf(EditorCategory.ADJUST)}
+    LaunchedEffect(ui.tool) {ui.tool?.let {category=EditorCategory.of(it)}}
+    Surface(modifier,color=MaterialTheme.colorScheme.surface) {
+        Column(Modifier.padding(horizontal=16.dp,vertical=4.dp)) {
             val tool=ui.tool;val draft=ui.draft
             if(tool==null || draft==null) {
-                Text("选择工具开始调整",style=MaterialTheme.typography.bodyMedium,modifier=Modifier.padding(12.dp))
-                Text("双指缩放，拖动画布；双击切换缩放。已应用的调整会自动保存。",style=MaterialTheme.typography.bodySmall,
-                    modifier=Modifier.padding(horizontal=12.dp,vertical=4.dp))
-            } else {
-                Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
-                when(tool) {
-                    EditorTool.LOCAL -> LocalPanel(ui,editor,draft)
-                    EditorTool.LIGHT -> AdjustmentPanel(draft,editor,listOf(Adjustment.EXPOSURE,Adjustment.CONTRAST,
-                        Adjustment.HIGHLIGHTS,Adjustment.SHADOWS,Adjustment.WHITES,Adjustment.BLACKS))
-                    EditorTool.COLOR -> AdjustmentPanel(draft,editor,listOf(Adjustment.SATURATION,Adjustment.VIBRANCE,Adjustment.WARMTH,Adjustment.TINT))
-                    EditorTool.DETAILS -> AdjustmentPanel(draft,editor,listOf(Adjustment.SHARPEN,Adjustment.VIGNETTE))
-                    EditorTool.CROP -> {
-                        Text("拖动四角调整范围，拖动框内移动",style=MaterialTheme.typography.bodySmall)
-                        Row(Modifier.horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(6.dp)) {
-                            val manifest=requireNotNull(ui.project).manifest
-                            val (w,h)=Geometry.canvasSize(manifest.width,manifest.height,draft.turns)
-                            listOf(null to "自由",w.toFloat()/h to "原图",1f to "1:1",4f/3 to "4:3",3f/4 to "3:4",16f/9 to "16:9",9f/16 to "9:16").forEach { (ratio,label) ->
-                                FilterChip(selected=ui.cropAspect==ratio,onClick={editor.cropAspect(ratio)},label={Text(label)})
+                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
+                    when(category) {
+                        EditorCategory.ADJUST -> {
+                            ToolEntry("明暗",Glyph.SUN) {editor.beginTool(EditorTool.LIGHT)}
+                            ToolEntry("颜色",Glyph.COLOR) {editor.beginTool(EditorTool.COLOR)}
+                            ToolEntry("锐化与暗角",Glyph.SHARPEN) {editor.beginTool(EditorTool.DETAILS)}
+                        }
+                        EditorCategory.RETOUCH -> {
+                            ToolEntry("柔肤（实验）",Glyph.FACE) {editor.beginParameter(EditorParameter.SOFTEN)}
+                            ToolEntry("局部曝光",Glyph.SUN) {editor.beginParameter(EditorParameter.LOCAL_EXPOSURE)}
+                            ToolEntry("编辑选区",Glyph.BRUSH) {editor.beginTool(EditorTool.LOCAL);editor.regionMode(RegionMode.MOVE)}
+                        }
+                        EditorCategory.COMPOSITION -> {
+                            ToolEntry("裁剪",Glyph.CROP) {editor.beginTool(EditorTool.CROP)}
+                            ToolEntry("旋转",Glyph.ROTATE) {editor.beginTool(EditorTool.GEOMETRY)}
+                        }
+                        EditorCategory.PRESETS -> ToolEntry("选择预设",Glyph.PRESET) {editor.beginTool(EditorTool.LOOKS)}
+                    }
+                }
+                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.SpaceBetween) {
+                    EditorCategory.entries.forEach { value ->
+                        TextButton(onClick={category=value},enabled=!ui.busy,modifier=Modifier.semantics {selected=category==value}) {
+                            Column(horizontalAlignment=Alignment.CenterHorizontally) {
+                                Text(value.label,color=if(category==value) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
+                                if(category==value) HorizontalDivider(Modifier.width(16.dp),thickness=2.dp,color=MaterialTheme.colorScheme.onSurface)
                             }
                         }
-                        val crop=draft.crop
-                        Text(if(crop==null) "整张照片" else "${crop.width} × ${crop.height}",style=MaterialTheme.typography.labelMedium)
-                        TextButton(onClick={editor.cropAspect(null);editor.updateDraft(draft.copy(crop=null))}) {Text("恢复完整画面")}
                     }
-                    EditorTool.GEOMETRY -> {
-                        val project=requireNotNull(ui.project).manifest
-                        Row(Modifier.horizontalScroll(rememberScrollState())) {
-                            TextButton(onClick={editor.updateDraft(Geometry.rotate(draft,project.width,project.height))}) {Text("旋转 90°")}
-                            TextButton(onClick={editor.updateDraft(Geometry.flip(draft,project.width,project.height,true))}) {Text("水平翻转")}
-                            TextButton(onClick={editor.updateDraft(Geometry.flip(draft,project.width,project.height,false))}) {Text("垂直翻转")}
+                }
+            } else {
+                Column(Modifier.weight(1f,fill=false).verticalScroll(rememberScrollState()).semantics {contentDescription="工具设置"}) {
+                    when(tool) {
+                        EditorTool.LOCAL -> LocalPanel(ui,editor,draft)
+                        EditorTool.LIGHT,EditorTool.COLOR,EditorTool.DETAILS -> AdjustmentPanel(ui,editor)
+                        EditorTool.CROP -> {
+                            Text("拖动四角调整范围，拖动框内移动",style=MaterialTheme.typography.bodySmall)
+                            Row(Modifier.horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(6.dp)) {
+                                val manifest=requireNotNull(ui.project).manifest
+                                val (w,h)=Geometry.canvasSize(manifest.width,manifest.height,draft.turns)
+                                listOf(null to "自由",w.toFloat()/h to "原图",1f to "1:1",4f/3 to "4:3",3f/4 to "3:4",16f/9 to "16:9",9f/16 to "9:16").forEach { (ratio,label) ->
+                                    FilterChip(selected=ui.cropAspect==ratio,enabled=!ui.comparing,onClick={editor.cropAspect(ratio);editor.localCheckpoint()},label={Text(label)})
+                                }
+                            }
+                            val crop=draft.crop
+                            Text(if(crop==null) "整张照片" else "${crop.width} × ${crop.height}",style=MaterialTheme.typography.labelMedium)
+                            TextButton(enabled=!ui.comparing,onClick={editor.cropAspect(null);editor.updateDraft(draft.copy(crop=null));editor.localCheckpoint()}) {Text("恢复完整画面")}
                         }
-                        Text("校正 ${String.format(Locale.ROOT,"%.1f°",draft.straighten)}",style=MaterialTheme.typography.labelLarge)
-                        Slider(value=draft.straighten,onValueChange={editor.updateDraft(draft.copy(straighten=it))},valueRange=-45f..45f,
-                            modifier=Modifier.systemGestureExclusion().semantics {contentDescription="校正角度"})
-                        TextButton(onClick={editor.updateDraft(draft.copy(straighten=0f))}) {Text("校正归零")}
-                    }
-                    EditorTool.LOOKS -> {
-                        Text("预设替换明暗、颜色与细节参数，保留构图；之后仍可精调。",style=MaterialTheme.typography.bodySmall)
-                        Row(Modifier.horizontalScroll(rememberScrollState())) {
-                            Look.entries.forEach { look -> TextButton(onClick={editor.updateDraft(look.apply(draft))}) {Text(look.label)} }
+                        EditorTool.GEOMETRY -> {
+                            val project=requireNotNull(ui.project).manifest
+                            Row(Modifier.horizontalScroll(rememberScrollState())) {
+                                TextButton(enabled=!ui.comparing,onClick={editor.updateDraft(Geometry.rotate(draft,project.width,project.height));editor.localCheckpoint()}) {Text("旋转 90°")}
+                                TextButton(enabled=!ui.comparing,onClick={editor.updateDraft(Geometry.flip(draft,project.width,project.height,true));editor.localCheckpoint()}) {Text("水平翻转")}
+                                TextButton(enabled=!ui.comparing,onClick={editor.updateDraft(Geometry.flip(draft,project.width,project.height,false));editor.localCheckpoint()}) {Text("垂直翻转")}
+                            }
+                            AdjustmentPanel(ui,editor)
+                        }
+                        EditorTool.LOOKS -> {
+                            Text("预设替换明暗、颜色与细节参数，保留构图；之后仍可精调。",style=MaterialTheme.typography.bodySmall)
+                            Row(Modifier.horizontalScroll(rememberScrollState())) {
+                                Look.entries.forEach { look -> TextButton(enabled=!ui.comparing,onClick={editor.updateDraft(look.apply(draft));editor.localCheckpoint()}) {Text(look.label)} }
+                            }
                         }
                     }
                 }
-                }
-                Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.End,verticalAlignment=Alignment.CenterVertically) {
-                    TextButton(onClick=editor::cancelTool) {Text("取消调整")}
-                    Button(onClick=editor::applyTool) {Text("应用调整")}
+                Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically) {
+                    TextButton(onClick=editor::cancelTool,enabled=!ui.busy,modifier=Modifier.semantics {contentDescription="取消调整"}) {
+                        EditorGlyph(Glyph.CLOSE);Spacer(Modifier.width(4.dp));Text("取消")
+                    }
+                    Text(tool.label,style=MaterialTheme.typography.labelMedium,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                    TextButton(onClick=editor::applyTool,enabled=!ui.busy,modifier=Modifier.semantics {contentDescription="应用调整"}) {
+                        EditorGlyph(Glyph.CHECK);Spacer(Modifier.width(4.dp));Text("完成")
+                    }
                 }
             }
         }
@@ -98,72 +116,76 @@ internal fun ToolPanel(ui: EditorUi, editor: EditorViewModel, modifier: Modifier
 }
 
 @Composable
-private fun AdjustmentPanel(edit: Edit, editor: EditorViewModel, choices: List<Adjustment>) {
-    var selected by rememberSaveable(choices.first()) { mutableStateOf(choices.first().name) }
-    val adjustment=choices.firstOrNull {it.name==selected} ?: choices.first()
-    Row(Modifier.horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(6.dp)) {
-        choices.forEach { value -> FilterChip(selected=value==adjustment,onClick={selected=value.name},label={Text(value.label)}) }
+private fun ToolEntry(label: String,glyph: Glyph,onClick: ()->Unit) {
+    TextButton(onClick=onClick,modifier=Modifier.widthIn(min=80.dp).heightIn(min=72.dp)) {
+        Column(horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(6.dp)) {
+            EditorGlyph(glyph);Text(label,style=MaterialTheme.typography.labelMedium)
+        }
     }
-    Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
-        Text(adjustment.label,Modifier.weight(1f),style=MaterialTheme.typography.titleSmall)
-        val value=adjustment.get(edit)
-        Text(if(adjustment==Adjustment.EXPOSURE) String.format(Locale.ROOT,"%.2f EV",value)
-            else String.format(Locale.ROOT,"%.0f",(value-(if(adjustment==Adjustment.SATURATION) 1f else 0f))*100),
-            style=MaterialTheme.typography.labelLarge)
-        TextButton(onClick={editor.updateDraft(adjustment.set(edit,adjustment.get(Edit())))}) {Text("归零")}
+}
+
+@Composable
+private fun AdjustmentPanel(ui: EditorUi,editor: EditorViewModel) {
+    val choices=EditorParameter.entries.filter {it.tool==ui.tool}
+    val selected=choices.firstOrNull {it.name==ui.selectedParameter} ?: choices.first()
+    val draft=requireNotNull(ui.draft)
+    key(ui.toolSession,selected) {
+        ParameterControl(id="${ui.toolSession}:${selected.name}",label=selected.label,value=selected.get(draft),
+            range=selected.range,neutral=selected.neutral,unit=selected.unit,ruler=selected.ruler,
+            step=selected.step,fineStep=selected.fineStep,description=selected.description,enabled=!ui.busy && !ui.comparing,
+            onChange={editor.setParameter(selected,it,ui.toolSession)},onFinished={editor.toolCheckpoint(ui.toolSession)})
     }
-    Slider(value=adjustment.get(edit),onValueChange={editor.updateDraft(adjustment.set(edit,it))},valueRange=adjustment.range,
-        modifier=Modifier.systemGestureExclusion().semantics {contentDescription="${adjustment.label}调整"})
+    var allParameters by remember {mutableStateOf(false)}
+    if(choices.size>1) Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
+      Row(Modifier.weight(1f).horizontalScroll(rememberScrollState())) {
+        choices.forEach { parameter ->
+            val changed=kotlin.math.abs(parameter.get(draft)-parameter.neutral)>.0001f
+            TextButton(onClick={editor.selectParameter(parameter)},enabled=!ui.comparing,
+                modifier=Modifier.widthIn(min=64.dp).semantics {this.selected=selected==parameter;stateDescription=if(changed) "已调整" else "默认值"}) {
+                Column(horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(4.dp)) {
+                    Box {
+                        EditorGlyph(parameter.glyph,color=if(selected==parameter) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
+                        if(changed) Text("•",Modifier.align(Alignment.TopEnd).offset(x=8.dp,y=(-8).dp),style=MaterialTheme.typography.labelSmall)
+                    }
+                    Text(parameter.label,style=MaterialTheme.typography.labelMedium)
+                    if(selected==parameter) HorizontalDivider(Modifier.width(16.dp),thickness=2.dp,color=MaterialTheme.colorScheme.onSurface)
+                    else Spacer(Modifier.height(2.dp))
+                }
+            }
+        }
+      }
+      Box {
+          TextButton(onClick={allParameters=true},enabled=!ui.comparing,
+              modifier=Modifier.semantics {contentDescription="全部参数"}) {
+              Column(horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(4.dp)) {
+                  EditorGlyph(Glyph.MORE);Text("全部",style=MaterialTheme.typography.labelMedium)
+              }
+          }
+          DropdownMenu(expanded=allParameters,onDismissRequest={allParameters=false}) {
+              choices.forEach {parameter ->
+                  DropdownMenuItem(text={Text(parameter.label)},onClick={allParameters=false;editor.selectParameter(parameter)})
+              }
+          }
+      }
+    }
 }
 
 @Composable
 private fun LocalPanel(ui: EditorUi, editor: EditorViewModel, draft: Edit) {
-    var setting by rememberSaveable {mutableStateOf("局部曝光")}
-    Row(Modifier.horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(6.dp)) {
-        RegionMode.entries.forEach { mode -> FilterChip(selected=ui.regionMode==mode,
-            onClick={editor.regionMode(mode)},label={Text(mode.label)}) }
+    val effects=ui.retouchStep==RetouchStep.EFFECT
+    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(6.dp)) {
+        FilterChip(selected=!effects,onClick={editor.retouchStep(RetouchStep.REGION)},enabled=!ui.comparing,label={Text("选区与修正")})
+        FilterChip(selected=effects,onClick={editor.retouchStep(RetouchStep.EFFECT)},enabled=!ui.comparing,label={Text("调整效果")})
     }
-    TextButton(onClick=editor::suggestRegion,enabled=!ui.busy && !ui.rendering) {Text("建议人像区域（实验）")}
-    Row(verticalAlignment=Alignment.CenterVertically) {
-        Checkbox(checked=ui.showRegion,onCheckedChange=editor::showRegion,modifier=Modifier.semantics {contentDescription="显示区域"})
-        Text("显示区域 · ${draft.local.region.strokes.size} 笔" + if(draft.local.region.base!=null) " · 含建议" else "",style=MaterialTheme.typography.bodySmall)
-        TextButton(onClick=editor::clearRegion,enabled=!draft.local.region.isEmpty) {Text("清空区域")}
-    }
-    Row(Modifier.horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(6.dp)) {
-        listOf("局部曝光","柔肤（实验）","细节保护","笔刷大小","边缘硬度").forEach { item ->
-            FilterChip(selected=setting==item,onClick={setting=item},label={Text(item)})
-        }
-    }
-    when(setting) {
-        "柔肤（实验）" -> {
-            Text(String.format(Locale.ROOT,"柔肤强度 %.0f%% · %s",draft.local.soften*100,
-                if(draft.local.region.isEmpty) "请先涂选区域" else "实验效果，留意纹理"),style=MaterialTheme.typography.labelMedium)
-            // Edge drags belong to this slider, not gesture navigation's Back action.
-            Slider(value=draft.local.soften,onValueChange={editor.updateDraft(draft.copy(local=draft.local.copy(soften=it)))},
-                onValueChangeFinished=editor::localCheckpoint,valueRange=0f..1f,
-                modifier=Modifier.systemGestureExclusion().semantics {contentDescription="柔肤强度调整"})
-        }
-        "细节保护" -> {
-            Text(String.format(Locale.ROOT,"细节保护 %.0f%% · 越高越保留局部变化",draft.local.detailProtection*100),style=MaterialTheme.typography.labelMedium)
-            Slider(value=draft.local.detailProtection,onValueChange={editor.updateDraft(draft.copy(local=draft.local.copy(detailProtection=it)))},
-                onValueChangeFinished=editor::localCheckpoint,valueRange=0f..1f,
-                modifier=Modifier.systemGestureExclusion().semantics {contentDescription="柔肤细节保护"})
-        }
-        "笔刷大小" -> {
-            Text("直径 ${String.format(Locale.ROOT,"%.1f%%",ui.brushRadius*200)} · 相对原图短边",style=MaterialTheme.typography.labelMedium)
-            Slider(value=ui.brushRadius,onValueChange=editor::brushRadius,valueRange=.005f.. .25f,
-                modifier=Modifier.systemGestureExclusion().semantics {contentDescription="区域笔刷大小"})
-        }
-        "边缘硬度" -> {
-            Text(String.format(Locale.ROOT,"%.0f%%",ui.brushHardness*100),style=MaterialTheme.typography.labelMedium)
-            Slider(value=ui.brushHardness,onValueChange=editor::brushHardness,valueRange=0f..1f,
-                modifier=Modifier.systemGestureExclusion().semantics {contentDescription="区域边缘硬度"})
-        }
-        else -> {
-            Text(String.format(Locale.ROOT,"%.2f EV · 仅影响涂选区域",draft.local.exposureEv),style=MaterialTheme.typography.labelMedium)
-            Slider(value=draft.local.exposureEv,onValueChange={editor.updateDraft(draft.copy(local=draft.local.copy(exposureEv=it)))},
-                onValueChangeFinished=editor::localCheckpoint,valueRange=-3f..3f,
-                modifier=Modifier.systemGestureExclusion().semantics {contentDescription="局部曝光调整"})
-        }
+    if(!effects) {
+        TextButton(onClick=editor::suggestRegion,enabled=!ui.busy && !ui.rendering && !ui.comparing) {Text("建议人像区域（实验）")}
+        RegionModes(ui,editor,enabled=!ui.comparing)
+        RegionVisibility(ui,editor,enabled=!ui.comparing)
+        BrushSettings(ui,editor,enabled=!ui.comparing && ui.regionMode!=RegionMode.MOVE)
+        Text("先检查作用范围，再调整效果；建议失败时仍可手工涂选。",style=MaterialTheme.typography.bodySmall)
+    } else {
+        Text(if(draft.local.region.isEmpty) "尚未选择区域 · 请先返回选区与修正" else "作用于当前选区 · 柔肤为实验效果",
+            style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+        AdjustmentPanel(ui,editor)
     }
 }

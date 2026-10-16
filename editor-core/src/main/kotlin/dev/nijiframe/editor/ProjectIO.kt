@@ -24,8 +24,27 @@ object ProjectIO {
         .digest(bytes).joinToString("") { "%02x".format(it) }
 
     fun create(original: ByteArray, width: Int, height: Int): Project =
+        createOwned(original, width, height).let { it.copy(original = original.copyOf()) }
+
+    private fun createOwned(original: ByteArray, width: Int, height: Int): Project =
         Project(Manifest(sourceBytes = original.size, sourceSha256 = digest(original),
-            width = width, height = height, honorExifColorSpace = true).also { it.validate() }, original.copyOf())
+            width = width, height = height, honorExifColorSpace = true).also { it.validate() }, original)
+
+    class ResourceTooLargeException : IllegalArgumentException("Resource exceeds size limit")
+
+    /** Import an original with one final byte array. The dimensions callback must only inspect its bytes. */
+    fun create(input: InputStream, stagingDirectory: File, beforeSourceAllocation: (Int) -> Unit = {},
+               dimensions: (ByteArray) -> Pair<Int, Int>): Project =
+        staged(input, stagingDirectory, MAX_SOURCE_BYTES) { file ->
+            RandomAccessFile(file, "r").use { source ->
+                val length = source.length().toInt()
+                beforeSourceAllocation(length)
+                val bytes = ByteArray(length)
+                source.readFully(bytes)
+                val (width, height) = dimensions(bytes)
+                createOwned(bytes, width, height)
+            }
+        }
 
     fun readBounded(input: InputStream, limit: Int): ByteArray {
         require(limit >= 0)
@@ -83,7 +102,10 @@ object ProjectIO {
     }
 
     /** Stage a non-seekable provider stream with a fixed buffer; no archive paths are extracted. */
-    fun read(input: InputStream, stagingDirectory: File, beforeSourceAllocation: (Int) -> Unit = {}): Project {
+    fun read(input: InputStream, stagingDirectory: File, beforeSourceAllocation: (Int) -> Unit = {}): Project =
+        staged(input, stagingDirectory, MAX_ARCHIVE_BYTES) { read(it, beforeSourceAllocation) }
+
+    private fun <T> staged(input: InputStream, stagingDirectory: File, limit: Int, read: (File) -> T): T {
         check(stagingDirectory.isDirectory || stagingDirectory.mkdirs()) { "Cannot create import directory" }
         val temp = File.createTempFile("project-import-", ".tmp", stagingDirectory)
         try {
@@ -96,16 +118,16 @@ object ProjectIO {
                     if (count == 0) {
                         val byte = input.read()
                         if (byte < 0) break
-                        require(++total <= MAX_ARCHIVE_BYTES) { "Resource exceeds size limit" }
+                        if (++total > limit) throw ResourceTooLargeException()
                         output.write(byte)
                     } else {
                         total += count
-                        require(total <= MAX_ARCHIVE_BYTES) { "Resource exceeds size limit" }
+                        if (total > limit) throw ResourceTooLargeException()
                         output.write(buffer, 0, count)
                     }
                 }
             }
-            return read(temp, beforeSourceAllocation)
+            return read(temp)
         } finally { temp.delete() }
     }
 

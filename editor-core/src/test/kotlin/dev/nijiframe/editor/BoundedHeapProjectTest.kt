@@ -6,6 +6,7 @@ import java.nio.file.Files
 import java.security.MessageDigest
 import java.util.Random
 import java.util.zip.CRC32
+import java.util.zip.ZipFile
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 import kotlinx.serialization.encodeToString
@@ -47,9 +48,23 @@ class BoundedHeapProjectTest {
                 assertEquals(ProjectIO.MAX_SOURCE_BYTES,project.original.size)
                 assertEquals(digest,ProjectIO.digest(project.original))
             }
-            verify(ProjectLibrary(root).read(id))
             val staging=File(root,"staging")
-            verify(archive.inputStream().use {ProjectIO.read(it,staging)})
+            // End the helper frame before the next scenario; inline use() temporaries can retain its result.
+            fun reopen() {
+                verify(ProjectLibrary(root).read(id))
+                verify(archive.inputStream().use {ProjectIO.read(it,staging)})
+            }
+            reopen()
+            assertTrue(staging.listFiles()!!.isEmpty())
+            // Import the encoded resource itself, without a second source array in the project factory.
+            ZipFile(archive).use { zip ->
+                val imported = zip.getInputStream(zip.getEntry("assets/original")).use { input ->
+                    ProjectIO.create(input, staging, { assertEquals(ProjectIO.MAX_SOURCE_BYTES,it) }) { 4000 to 3000 }
+                }
+                assertEquals(digest,ProjectIO.digest(imported.original))
+                assertEquals(4000,imported.manifest.width)
+                assertTrue(imported.manifest.honorExifColorSpace)
+            }
             assertTrue(staging.listFiles()!!.isEmpty())
         } finally {root.deleteRecursively()}
     }

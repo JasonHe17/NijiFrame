@@ -116,4 +116,37 @@ class FileProjectTest {
         assertThrows(IllegalArgumentException::class.java) {ProjectIO.read(input,staging)}
         assertTrue(staging.listFiles()!!.isEmpty())
     }
+    @Test fun originalImportPreservesBytesAndCleansFailedInspectionOrAdmission() = inDirectory { root ->
+        val bytes = ByteArray(70001) {it.toByte()}
+        val imported = ProjectIO.create(bytes.inputStream(),root) { 40 to 30 }
+        assertArrayEquals(bytes,imported.original)
+        assertEquals(ProjectIO.digest(bytes),imported.manifest.sourceSha256)
+        assertTrue(root.listFiles()!!.isEmpty())
+        assertThrows(IllegalArgumentException::class.java) {
+            ProjectIO.create(bytes.inputStream(),root) { throw IllegalArgumentException("invalid image") }
+        }
+        var inspected=false
+        assertThrows(IllegalArgumentException::class.java) {
+            ProjectIO.create(bytes.inputStream(),root,{throw IllegalArgumentException("memory")}) {inspected=true;40 to 30}
+        }
+        assertFalse(inspected)
+        assertTrue(root.listFiles()!!.isEmpty())
+        val copied=ProjectIO.create(bytes,40,30)
+        bytes[0]=99
+        assertNotEquals(bytes[0],copied.original[0])
+    }
+
+    @Test fun originalImportStopsAtSourceLimitWithoutInspectingOrLeavingCache() = inDirectory { root ->
+        var inspected=false
+        val input=object : InputStream() {
+            override fun read()=0
+            override fun read(b: ByteArray, off: Int, len: Int)=len
+        }
+        assertThrows(ProjectIO.ResourceTooLargeException::class.java) {
+            ProjectIO.create(input,root) {inspected=true;40 to 30}
+        }
+        assertFalse(inspected)
+        assertTrue(root.listFiles()!!.isEmpty())
+    }
+
 }

@@ -28,7 +28,7 @@ jobs:
       - name: Install declared Android components
         run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'ndk;28.2.13676358' 'cmake;3.22.1'
       - name: Unit tests, APK and lint
-        run: ./gradlew :editor-core:test :app:assembleDebug :app:lintDebug
+        run: ./gradlew :editor-core:test :app:testDebugUnitTest :app:assembleDebug :app:lintDebug
       - name: Check native library alignment for 16 KB pages
         run: |
           "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 4 app/build/outputs/apk/debug/app-debug.apk
@@ -52,6 +52,8 @@ jobs:
             app/build/outputs/apk/debug/*.provenance.json
             app/build/reports/lint-results-debug.*
             app/build/native-alignment.json
+            app/build/reports/tests/
+            app/build/test-results/
             editor-core/build/reports/tests/
             editor-core/build/test-results/
             build/native/Testing/
@@ -82,7 +84,15 @@ jobs:
           packages: platform-tools
       - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
       - name: Install SDK and emulator
-        run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'ndk;28.2.13676358' 'cmake;3.22.1' 'emulator' 'system-images;android-${{ matrix.api }};${{ matrix.image }};x86_64'
+        shell: bash
+        run: |
+          # SDK downloads can be interrupted before ZIP validation. Bound retries to
+          # infrastructure setup; app tests themselves are never retried here.
+          for attempt in 1 2 3; do
+            if sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'ndk;28.2.13676358' 'cmake;3.22.1' 'emulator' 'system-images;android-${{ matrix.api }};${{ matrix.image }};x86_64'; then exit 0; fi
+            if [ "$attempt" = 3 ]; then exit 1; fi
+            sleep 5
+          done
       - name: Compile test APKs before emulator boot
         run: ./gradlew --no-daemon --max-workers=2 :app:assembleDebug :app:assembleDebugAndroidTest
       - name: Run Android project, local editing and UI checks
@@ -134,7 +144,9 @@ jobs:
           done
           test "$(adb shell getprop sys.boot_completed | tr -d '\r')" = 1
           test "$(adb shell getprop dalvik.vm.heapgrowthlimit | tr -d '\r')" = 512m
-          adb shell input keyevent 82
+          # Avoid sending a key to a still-starting launcher: an input timeout can
+          # leave its ANR dialog above every subsequent app UI test.
+          adb shell wm dismiss-keyguard
           adb shell settings put global window_animation_scale 0
           adb shell settings put global transition_animation_scale 0
           adb shell settings put global animator_duration_scale 0

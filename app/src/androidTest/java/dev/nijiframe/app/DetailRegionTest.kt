@@ -8,6 +8,7 @@ import android.graphics.Rect
 import android.app.Application
 import android.net.Uri
 import androidx.lifecycle.ViewModelStore
+import androidx.lifecycle.ViewModelProvider
 import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.*
@@ -88,6 +89,7 @@ class DetailRegionTest {
 
     @Test fun realDetailBrushPreservesBaseAndSupportsCancelUndoReopenAndExport() = runBlocking {
         val device=UiDevice.getInstance(instrumentation)
+        lateinit var model: EditorViewModel
         fun fresh() {if(android.os.Build.VERSION.SDK_INT>=34) instrumentation.uiAutomation.clearCache()}
         fun desc(label: String): UiObject {fresh();return device.findObject(UiSelector().description(label))}
         fun text(label: String): UiObject {fresh();return device.findObject(UiSelector().text(label))}
@@ -97,12 +99,29 @@ class DetailRegionTest {
             assertTrue(condition())
         }
         fun actionable(label: String): UiObject2? {
-            fresh();var node=device.findObject(By.text(label)) ?: return null
+            fresh();var node=(device.findObject(By.desc(label)) ?: device.findObject(By.text(label))) ?: return null
             while(!node.isClickable) node=node.parent ?: return null
             return node.takeIf {it.isEnabled}
         }
         fun tap(label: String) {await {actionable(label)!=null};requireNotNull(actionable(label)).click();device.waitForIdle()}
-        fun ready(count: Int) {await {desc("细节区域画布").exists() && text("细节区域 · $count 笔").exists()}}
+        fun selectMode(label: String, mode: RegionMode) {
+            tap(label)
+            // Input injection/idle can return before the click's state reaches Compose.
+            // A mode change during the next gesture restarts its pointer handler.
+            await {model.ui.value.regionMode==mode && actionable(label)?.isChecked==true}
+            instrumentation.waitForIdleSync();device.waitForIdle()
+        }
+        fun ready(count: Int) {
+            fun frameReady(): Boolean = model.ui.value.let { ui ->
+                ui.detail?.loading==false && ui.detail.bitmap!=null &&
+                    ui.draft?.local?.region?.strokes?.size==count
+            }
+            // Accessibility can retain the preceding canvas while the new frame is rendering.
+            // Wait for the actual frame first, then let its UI/accessibility update settle.
+            await(::frameReady)
+            instrumentation.waitForIdleSync();device.waitForIdle()
+            await {frameReady() && desc("细节区域画布").exists() && text("细节区域 · $count 笔").exists()}
+        }
         fun nativeFrame(canvas: Rect): Rect {
             // API 29 can report a clipped accessibility rectangle. Locate the actual pixels
             // instead of assuming that rectangle and the native frame have the same center.
@@ -130,9 +149,25 @@ class DetailRegionTest {
         val id=library.create(project)
         val root=File(context.cacheDir,"detail-brush-${System.nanoTime()}").apply {mkdirs()}
         val scenario=ActivityScenario.launch(MainActivity::class.java)
+        scenario.onActivity { model=ViewModelProvider(it)[EditorViewModel::class.java] }
+        val events=java.util.Collections.synchronizedList(mutableListOf<String>())
+        fun state(): String = model.ui.value.let { "mode=${it.regionMode} strokes=${it.draft?.local?.region?.strokes?.size} " +
+            "frame=${System.identityHashCode(it.detail)} revision=${it.detail?.revision} loading=${it.detail?.loading} " +
+            "bitmap=${it.detail?.bitmap?.width}x${it.detail?.bitmap?.height} error=${it.detail?.error}" }
+        fun record(message: String) = synchronized(events) {
+            if(events.size>=256) events.removeAt(0)
+            events.add("${android.os.SystemClock.uptimeMillis()} $message ${state()}")
+        }
+        val observer=CoroutineScope(Dispatchers.Default).launch { model.ui.collect { record("state") } }
+        fun clickFrame(x: Int,y: Int) {
+            record("click $x,$y")
+            assertTrue("A brush click requires a completed detail frame: ${state()}",
+                model.ui.value.detail?.let { !it.loading && it.bitmap!=null } == true)
+            assertTrue("Touch injection failed",device.click(x,y));record("click returned")
+        }
         try {
-            await {desc("编辑预览").exists()};tap("局部");tap("查看细节");ready(0)
-            tap("细节擦除")
+            await {desc("编辑预览").exists()};tap("修饰");tap("编辑选区");tap("添加区域");tap("查看细节");ready(0)
+            selectMode("擦除区域",RegionMode.ERASE)
             var canvas=desc("细节区域画布").visibleBounds
             // The small native frame is centered, with blank space around it.
             device.click(canvas.left+2,canvas.centerY());device.waitForIdle();ready(0)
@@ -146,12 +181,12 @@ class DetailRegionTest {
             tap("查看调整");ready(1)
             tap("关闭细节");tap("取消调整")
             assertEquals(initial,library.read(id).manifest.edit)
-            tap("局部");tap("查看细节");ready(0);tap("细节擦除")
+            tap("修饰");tap("编辑选区");tap("添加区域");tap("查看细节");ready(0);selectMode("擦除区域",RegionMode.ERASE)
             canvas=desc("细节区域画布").visibleBounds
             val frameBounds=nativeFrame(canvas)
-            device.click(frameBounds.left+210,frameBounds.top+240);device.waitForIdle();ready(1)
-            tap("细节添加")
-            device.click(frameBounds.left+110,frameBounds.top+320);device.waitForIdle();ready(2)
+            clickFrame(frameBounds.left+210,frameBounds.top+240);device.waitForIdle();ready(1)
+            record("before add mode");selectMode("添加区域",RegionMode.ADD);record("after add mode")
+            clickFrame(frameBounds.left+110,frameBounds.top+320);device.waitForIdle();ready(2)
             scenario.recreate();ready(2)
             device.setOrientationLeft()
             await {device.displayWidth>device.displayHeight && desc("细节区域画布").exists()}
@@ -188,6 +223,8 @@ class DetailRegionTest {
             // App UID cannot write directly to arbitrary Downloads paths on every supported API.
             // A secondary evidence failure must never replace the assertion that caused it.
             android.util.Log.e("DetailRegionTest","Detail correction assertion failed",error)
+            synchronized(events) { println(events.joinToString("\n")) }
+            runCatching { device.dumpWindowHierarchy(System.out) }
             runCatching {
                 device.executeShellCommand("mkdir -p /sdcard/Download/nijiframe-test-evidence")
                 device.dumpWindowHierarchy(File(context.cacheDir,"detail-brush-failure.xml"))
@@ -196,6 +233,7 @@ class DetailRegionTest {
             }.onFailure {error.addSuppressed(it)}
             throw error
         } finally {
+            observer.cancelAndJoin()
             device.setOrientationNatural();device.unfreezeRotation()
             scenario.close();source.recycle();library.delete(id);root.deleteRecursively()
             if(previous!=null && library.entries().any {it.id==previous}) library.markOpened(previous)

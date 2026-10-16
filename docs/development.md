@@ -15,7 +15,7 @@ cd NijiFrame
 
 ```sh
 sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'ndk;28.2.13676358' 'cmake;3.22.1'
-./gradlew :editor-core:test :app:assembleDebug :app:lintDebug
+./gradlew :editor-core:test :app:testDebugUnitTest :app:assembleDebug :app:lintDebug
 "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 4 app/build/outputs/apk/debug/app-debug.apk
 python3 scripts/check-apk-native.py app/build/outputs/apk/debug/app-debug.apk
 ```

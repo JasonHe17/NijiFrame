@@ -5,6 +5,7 @@ import android.content.ClipData
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -32,6 +33,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.core.view.WindowCompat
 import dev.nijiframe.editor.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -42,7 +44,17 @@ class MainActivity : ComponentActivity() {
     private val editor: EditorViewModel by viewModels()
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { MaterialTheme(colorScheme=darkColorScheme()) { NijiFrame(editor) } }
+        enableEdgeToEdge()
+        setContent {
+            val ui by editor.ui.collectAsStateWithLifecycle()
+            NijiTheme(ui.appearance,ui.canvasBackground) {
+                val dark=LocalEditorDark.current
+                SideEffect {WindowCompat.getInsetsController(window,window.decorView).apply {
+                    isAppearanceLightStatusBars=!dark;isAppearanceLightNavigationBars=!dark
+                }}
+                NijiFrame(editor)
+            }
+        }
     }
 }
 
@@ -56,13 +68,24 @@ internal fun NijiFrame(editor: EditorViewModel) {
     val jpegExport=rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("image/jpeg")) { if(it==null) editor.cancelExportSelection() else editor.exportPhoto(it,PhotoFormat.JPEG) }
     val pngExport=rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("image/png")) { if(it==null) editor.cancelExportSelection() else editor.exportPhoto(it,PhotoFormat.PNG) }
     var showExport by rememberSaveable { mutableStateOf(false) }
+    var showInfo by rememberSaveable { mutableStateOf(false) }
     var showReset by rememberSaveable { mutableStateOf(false) }
     var showBack by rememberSaveable { mutableStateOf(false) }
     var showAbout by rememberSaveable { mutableStateOf(false) }
+    var showAppearance by rememberSaveable {mutableStateOf(false)}
+    var backToHome by rememberSaveable {mutableStateOf(false)}
     var renameId by rememberSaveable { mutableStateOf<String?>(null) }
     var renameText by rememberSaveable { mutableStateOf("") }
     var deleteId by rememberSaveable { mutableStateOf<String?>(null) }
-    fun back() { if(ui.draft!=null) showBack=true else editor.home() }
+    fun back(homeRequested: Boolean=false) {
+        if(ui.comparing) {editor.compare();return}
+        if(!homeRequested && ui.tool==EditorTool.LOCAL && ui.retouchStep==RetouchStep.EFFECT) {
+            editor.retouchStep(RetouchStep.REGION);return
+        }
+        if(ui.draft!=null && ui.draft!=ui.project?.manifest?.edit) {backToHome=homeRequested;showBack=true}
+        else if(ui.draft!=null) {editor.cancelTool();if(homeRequested) editor.home()}
+        else editor.home()
+    }
     BackHandler(enabled=!ui.home && !ui.busy) { back() }
     LaunchedEffect(ui.exportRequest) {
         ui.exportRequest?.let { destination ->
@@ -88,10 +111,11 @@ internal fun NijiFrame(editor: EditorViewModel) {
             if(ui.home) {
                 Row(Modifier.fillMaxWidth().padding(16.dp),verticalAlignment=Alignment.CenterVertically) {
                     Text("NijiFrame",style=MaterialTheme.typography.headlineMedium,modifier=Modifier.weight(1f))
+                    TextButton(onClick={showAppearance=true}) {Text("外观")}
                     TextButton(onClick={showAbout=true}) { Text("关于") }
                 }
-                Row(Modifier.padding(horizontal=16.dp),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                    Button(onClick={import.launch(PhotoInput.mimeTypes)},enabled=!ui.busy) { Text("导入照片") }
+                FlowRow(Modifier.padding(horizontal=16.dp),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                    Button(shape=androidx.compose.foundation.shape.RoundedCornerShape(8.dp),onClick={import.launch(PhotoInput.mimeTypes)},enabled=!ui.busy) { Text("导入照片") }
                     OutlinedButton(onClick={open.launch(arrayOf("*/*"))},enabled=!ui.busy) { Text("打开工程") }
                 }
                 Text("我的工程",style=MaterialTheme.typography.titleMedium,modifier=Modifier.padding(16.dp))
@@ -114,22 +138,22 @@ internal fun NijiFrame(editor: EditorViewModel) {
                 Text(ui.status,style=MaterialTheme.typography.bodySmall,modifier=Modifier.padding(16.dp))
             } else {
                 Row(Modifier.fillMaxWidth().padding(horizontal=8.dp),verticalAlignment=Alignment.CenterVertically) {
-                    TextButton(onClick={back()},enabled=!ui.busy) { Text("项目") }
-                    Column(Modifier.weight(1f).padding(horizontal=4.dp)) {
-                        Text(ui.project?.manifest?.name.orEmpty(),maxLines=1,overflow=TextOverflow.Ellipsis,
-                            style=MaterialTheme.typography.titleSmall)
-                        Text(if(ui.draft!=null && ui.draft!=ui.project?.manifest?.edit) "调整待应用"
-                            else if(ui.saving) "自动保存中" else if(ui.dirty) "未保存" else "已保存",
-                            style=MaterialTheme.typography.labelSmall)
+                    IconButton(onClick={back(true)},enabled=!ui.busy,modifier=Modifier.semantics {contentDescription="项目"}) {EditorGlyph(Glyph.BACK)}
+                    TextButton(onClick={showInfo=true},modifier=Modifier.weight(1f)
+                        .semantics {contentDescription="工程与照片信息"}) {
+                        Column(Modifier.fillMaxWidth()) {
+                            Text(ui.project?.manifest?.name.orEmpty(),maxLines=1,overflow=TextOverflow.Ellipsis,
+                                style=MaterialTheme.typography.titleSmall,color=MaterialTheme.colorScheme.onSurface)
+                            Text(editorSaveLabel(ui),style=MaterialTheme.typography.labelSmall,maxLines=1,overflow=TextOverflow.Ellipsis)
+                        }
                     }
-                    TextButton(onClick={if(ui.tool==EditorTool.LOCAL) editor.localUndo() else editor.undo()},enabled=!ui.busy &&
-                        (if(ui.tool==EditorTool.LOCAL) ui.localCanUndo else ui.canUndo && ui.tool==null)) { Text("撤销") }
-                    TextButton(onClick={if(ui.tool==EditorTool.LOCAL) editor.localRedo() else editor.redo()},enabled=!ui.busy &&
-                        (if(ui.tool==EditorTool.LOCAL) ui.localCanRedo else ui.canRedo && ui.tool==null)) { Text("重做") }
+                    TextButton(onClick={showExport=true},enabled=!ui.busy) {Text("导出")}
                     var menu by remember { mutableStateOf(false) }
                     Box {
-                        IconButton(onClick={menu=true},enabled=!ui.busy,modifier=Modifier.semantics {contentDescription="编辑菜单"}) { Text("⋮") }
+                        IconButton(onClick={menu=true},enabled=!ui.busy,modifier=Modifier.semantics {contentDescription="编辑菜单"}) { EditorGlyph(Glyph.MORE) }
                         DropdownMenu(expanded=menu,onDismissRequest={menu=false}) {
+                            DropdownMenuItem(text={Text("工程与照片信息")},onClick={menu=false;showInfo=true})
+                            DropdownMenuItem(text={Text("外观与查看")},onClick={menu=false;showAppearance=true})
                             DropdownMenuItem(text={Text("原尺寸细节")},enabled=!ui.rendering && ui.preview!=null,onClick={menu=false;editor.openDetail()})
                             DropdownMenuItem(text={Text("保存工程")},onClick={menu=false;editor.applyTool();editor.save()})
                             DropdownMenuItem(text={Text("重命名")},onClick={menu=false;renameId=ui.projectId;renameText=ui.project?.manifest?.name.orEmpty()})
@@ -138,40 +162,47 @@ internal fun NijiFrame(editor: EditorViewModel) {
                         }
                     }
                 }
-                Row(Modifier.fillMaxWidth().padding(horizontal=12.dp),verticalAlignment=Alignment.CenterVertically) {
-                    TextButton(onClick=editor::compare,enabled=!ui.busy) {Text(if(ui.comparing) "返回调整" else "对比原图")}
-                    Text(if(ui.draft!=null && ui.draft!=ui.project?.manifest?.edit) "预览尚未应用" else ui.status,modifier=Modifier.weight(1f).padding(horizontal=8.dp),maxLines=1,
-                        overflow=TextOverflow.Ellipsis,style=MaterialTheme.typography.labelSmall)
-                    Button(onClick={editor.applyTool();showExport=true},enabled=!ui.busy) {Text("导出")}
+                if(ui.status.startsWith("照片已导出") || ui.status=="可编辑工程已导出" || ui.status=="已取消导出") {
+                    Text(ui.status,Modifier.padding(horizontal=16.dp,vertical=4.dp),style=MaterialTheme.typography.bodySmall)
                 }
-                ui.sourceNotice?.let { Text(it,style=MaterialTheme.typography.labelSmall,
-                    modifier=Modifier.padding(horizontal=16.dp)) }
+                ui.sourceWarning?.let {Text(it,Modifier.padding(horizontal=16.dp,vertical=4.dp),
+                    style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.error)}
                 BoxWithConstraints(Modifier.weight(1f)) {
+                    val panelMaxHeight=minOf(if(ui.tool==EditorTool.LOCAL) 360.dp else 330.dp,maxHeight*.62f)
                     if(maxWidth>600.dp) Row(Modifier.fillMaxSize()) {
-                        EditorCanvas(ui,editor,Modifier.weight(1f).fillMaxHeight())
-                        ToolPanel(ui,editor,Modifier.width(310.dp).fillMaxHeight())
+                        Column(Modifier.weight(1f).fillMaxHeight()) {
+                            EditorCanvas(ui,editor,Modifier.weight(1f).fillMaxWidth())
+                            EditorActions(ui,editor)
+                        }
+                        ToolPanel(ui,editor,Modifier.width(330.dp).fillMaxHeight())
                     } else Column(Modifier.fillMaxSize()) {
                         EditorCanvas(ui,editor,Modifier.weight(1f).fillMaxWidth())
-                        ToolPanel(ui,editor,Modifier.fillMaxWidth().heightIn(min=150.dp,max=if(ui.tool==EditorTool.LOCAL) 340.dp else 270.dp))
+                        EditorActions(ui,editor)
+                        ToolPanel(ui,editor,Modifier.fillMaxWidth().heightIn(max=panelMaxHeight))
                     }
                 }
             }
         }
     }
+    if(showAppearance) AppearanceDialog(ui,editor) {showAppearance=false}
+    if(showInfo) ProjectInfoDialog(ui) {showInfo=false}
     if(ui.suggestion!=null) RegionSuggestionDialog(ui,editor)
     if(ui.detail!=null) DetailInspector(ui,editor)
-    if(showExport) ExportDialog(ui,editor,onDismiss={showExport=false},onSavePhoto={
+    if(showExport) ExportSheet(ui,editor,onDismiss={showExport=false},onSavePhoto={
         showExport=false
-        editor.prepareExport(ExportDestination.PHOTO)
-    },onSaveProject={showExport=false;editor.prepareExport(ExportDestination.PROJECT)},onShare={showExport=false;editor.sharePhoto()})
+        editor.applyTool();editor.prepareExport(ExportDestination.PHOTO)
+    },onSaveProject={showExport=false;editor.applyTool();editor.prepareExport(ExportDestination.PROJECT)},onShare={showExport=false;editor.applyTool();editor.sharePhoto()})
     if(showReset) AlertDialog(onDismissRequest={showReset=false},title={Text("重置全部调整？")},
         text={Text("将恢复原图构图、明暗和颜色。这一步可以撤销。")},
         confirmButton={TextButton(onClick={showReset=false;editor.cancelTool();editor.commit(Edit())}) {Text("重置")}},
         dismissButton={TextButton(onClick={showReset=false}) {Text("取消")}})
     if(showBack) AlertDialog(onDismissRequest={showBack=false},title={Text("当前工具还有未完成的调整")},
         text={Text("应用后会自动保存，或放弃本次工具中的修改。")},
-        confirmButton={TextButton(onClick={showBack=false;editor.applyTool();editor.home()}) {Text("应用并返回")}},
-        dismissButton={TextButton(onClick={showBack=false;editor.cancelTool();editor.home()}) {Text("放弃本次调整")}})
+        confirmButton={TextButton(onClick={showBack=false;editor.applyTool();if(backToHome) editor.home()}) {Text("应用并返回")}},
+        dismissButton={Column {
+            TextButton(onClick={showBack=false;editor.cancelTool();if(backToHome) editor.home()}) {Text("放弃本次调整")}
+            TextButton(onClick={showBack=false}) {Text("继续编辑")}
+        }})
     renameId?.let { id -> AlertDialog(onDismissRequest={renameId=null},title={Text("重命名工程")},
         text={OutlinedTextField(value=renameText,onValueChange={renameText=it.take(80)},singleLine=true,label={Text("工程名称")})},
         confirmButton={TextButton(enabled=renameText.isNotBlank(),onClick={renameId=null;editor.renameProject(id,renameText)}) {Text("保存名称")}},
@@ -210,7 +241,7 @@ private fun ProjectCard(entry: ProjectLibrary.Entry, editor: EditorViewModel, on
                 Text(DateFormat.getDateInstance(DateFormat.SHORT).format(Date(entry.modified)),style=MaterialTheme.typography.labelSmall)
             }
             Box {
-                IconButton(onClick={menu=true},modifier=Modifier.semantics {contentDescription="${entry.name} 更多操作"}) {Text("⋮")}
+                IconButton(onClick={menu=true},modifier=Modifier.semantics {contentDescription="${entry.name} 更多操作"}) {EditorGlyph(Glyph.MORE)}
                 DropdownMenu(expanded=menu,onDismissRequest={menu=false}) {
                     DropdownMenuItem(text={Text("重命名")},enabled=!entry.damaged,onClick={menu=false;onRename()})
                     DropdownMenuItem(text={Text("创建副本")},enabled=!entry.damaged,onClick={menu=false;editor.duplicateProject(entry.id)})
@@ -219,43 +250,6 @@ private fun ProjectCard(entry: ProjectLibrary.Entry, editor: EditorViewModel, on
             }
         }
     }
-}
-
-@Composable
-private fun ExportDialog(ui: EditorUi, editor: EditorViewModel, onDismiss: () -> Unit,
-                         onSavePhoto: () -> Unit, onSaveProject: () -> Unit, onShare: () -> Unit) {
-    val settings=ui.exportSettings
-    val project=requireNotNull(ui.project)
-    val (width,height)=Geometry.outputSize(project.manifest.width,project.manifest.height,project.manifest.edit)
-    val (outWidth,outHeight)=settings.dimensions(width,height)
-    AlertDialog(onDismissRequest=onDismiss,title={Text("导出与分享")},text={
-        Column(Modifier.verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(8.dp)) {
-            Text("照片格式")
-            Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                PhotoFormat.entries.forEach { format -> FilterChip(selected=settings.format==format,onClick={editor.setExportSettings(settings.copy(format=format))},label={Text(format.name)}) }
-            }
-            if(settings.format==PhotoFormat.JPEG) {
-                Text("JPEG 质量：${settings.quality}")
-                Slider(value=settings.quality.toFloat(),onValueChange={editor.setExportSettings(settings.copy(quality=it.toInt()))},valueRange=1f..100f,
-                    modifier=Modifier.semantics {contentDescription="JPEG 质量"})
-            }
-            Text("照片尺寸：$outWidth × $outHeight")
-            Column {
-                listOf(null to "原尺寸",4000 to "长边 4000",2048 to "长边 2048",1280 to "长边 1280").forEach { (edge,label) ->
-                    Row(verticalAlignment=Alignment.CenterVertically) {
-                        RadioButton(selected=settings.maxEdge==edge,onClick={editor.setExportSettings(settings.copy(maxEdge=edge))})
-                        TextButton(onClick={editor.setExportSettings(settings.copy(maxEdge=edge))}) {Text(label)}
-                    }
-                }
-            }
-            if (ImageSizing.previewSample(project.manifest.width, project.manifest.height) > 1) {
-                Text("原图完整保留。原尺寸导出需要更多内存；选择较小尺寸可降低负担，柔肤与锐化细节可能略有差异。",style=MaterialTheme.typography.bodySmall)
-            }
-            Text("照片导出为 8 位 sRGB / SDR，不保留 HDR 增益图或位置等原始元数据。工程完整保留原文件，可继续编辑。",style=MaterialTheme.typography.bodySmall)
-            OutlinedButton(onClick=onShare,modifier=Modifier.fillMaxWidth()) {Text("分享照片")}
-            TextButton(onClick=onSaveProject,modifier=Modifier.fillMaxWidth()) {Text("导出可编辑工程")}
-        }
-    },confirmButton={Button(onClick=onSavePhoto) {Text("保存照片")}},dismissButton={TextButton(onClick=onDismiss) {Text("取消")}})
 }
 
 @Composable

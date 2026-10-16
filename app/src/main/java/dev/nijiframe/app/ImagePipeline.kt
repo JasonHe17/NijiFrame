@@ -20,10 +20,11 @@ object ImagePipeline {
         val colorName: String="sRGB", val assumeAdobeRgb: Boolean=false, val gainmapHint: Boolean=false) {
         val width get() = if (orientation in 5..8) encodedHeight else encodedWidth
         val height get() = if (orientation in 5..8) encodedWidth else encodedHeight
+        val warning: String? get() = if(android.os.Build.VERSION.SDK_INT<=32 && mime in setOf("image/heif","image/heic","image/avif"))
+            "此系统的 HEIF/AVIF 解码可能有色偏，建议先由相册导出 JPEG" else null
         val notice get() = "${mime.substringAfter('/').uppercase()} · $colorName → sRGB / SDR"+
             (if(gainmapHint) "（HDR 使用 SDR 底图）" else "")+"；原文件保留"+
-            (if(android.os.Build.VERSION.SDK_INT<=32 && mime in setOf("image/heif","image/heic","image/avif"))
-                "。此系统的 HEIF/AVIF 解码可能有色偏，建议先由相册导出 JPEG" else "")
+            (warning?.let {"。$it"} ?: "")
         // These platform codecs may need whole-frame scratch even for a sampled or cropped result.
         val codecHeadroom get() = if(mime in setOf("image/avif","image/heif","image/heic")) width.toLong()*height*8 else 0L
     }
