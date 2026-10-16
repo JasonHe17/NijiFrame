@@ -65,3 +65,14 @@ The bounded-heap JVM test validates the project resource-loading path only, with
 UI brush checks wait for both the actual completed detail frame and the accessibility canvas before injecting a touch. Accessibility node existence alone can describe the preceding frame while decoding/rendering is still in progress. Failure evidence retains a bounded chronology of frame readiness, brush mode and synthetic touch positions; real touch, coordinate, undo and persisted-output assertions remain enabled. See [Android test synchronization guidance](https://developer.android.com/develop/ui/compose/testing/synchronization).
 
 CI unlocks dedicated emulators through `wm dismiss-keyguard`, without delivering a Menu key to the newly started launcher. A launcher ANR dialog can otherwise obscure unrelated UI checks. SDK installation has at most three attempts for download/archive errors; application tests are not automatically retried. Preserve bootstrap logs when distinguishing infrastructure and product failures.
+
+
+## Mainline verification follow-up (2026-10-16)
+
+The accepted candidate `c5b7614` passed [run 38874840309](https://github.com/JasonHe17/NijiFrame/actions/runs/38874840309), with 53 Android checks on each of the six configured environments. Merge `3669ea2` has the identical Git tree, but its subsequent [mainline run 38878652710](https://github.com/JasonHe17/NijiFrame/actions/runs/38878652710) failed:
+
+- Build, JVM/lint/native checks and API 29/31/34/36 jobs passed.
+- API 35 with 16 KiB pages stopped after 37 reported tests because the application process received SIGSEGV during `ModernEditorTest`. The run is incomplete; its root cause remains unresolved.
+- API 37 completed 53 tests with 11 UI failures. Logs record a Pixel Launcher ANR, and failure screenshots show its system dialog covering the editor. Emulator startup and UI readiness need investigation; this is not a completed successful UI run.
+
+Retain both results. A prior successful run, an unchanged source tree or synchronized branches do not establish that intermittent runtime failures are fixed. No checks were removed and no runtime workaround was introduced as part of branch maintenance.
